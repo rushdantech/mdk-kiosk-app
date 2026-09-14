@@ -19,7 +19,7 @@ import {
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
-import type { PayChoice } from '../voice/intent'
+import { inferBillScope, inferConfirm, inferPayChoice, type PayChoice } from '../voice/intent'
 
 type PayStage = 'bills' | 'confirm' | 'duitnow' | 'card'
 
@@ -178,7 +178,35 @@ function who(from: CaptionFrom): string {
   return from === 'user' ? tx.value('you') : tx.value('assistant')
 }
 
-watch([captions, interim], () => {
+watch([captions, interim, liveFrom], () => {
+  if (liveFrom.value === 'user') {
+    const lastUser = [...captions.value].reverse().find((line) => line.from === 'user')
+    const spoken = `${interim.value} ${lastUser ? lineText(lastUser) : ''}`.trim()
+    if (spoken) {
+      if (payStage.value === 'confirm') {
+        const switchMethod = inferPayChoice(spoken)
+        if (switchMethod === 'duitnow' || switchMethod === 'card') {
+          proposePay(switchMethod)
+        } else {
+          const answer = inferConfirm(spoken)
+          if (answer === true) {
+            confirmPay()
+          } else if (answer === false) {
+            cancelPay()
+          }
+        }
+      } else {
+        const scope = inferBillScope(spoken)
+        if (scope) {
+          showBills(scope)
+        }
+        const payMethod = inferPayChoice(spoken)
+        if (payMethod === 'duitnow' || payMethod === 'card') {
+          proposePay(payMethod)
+        }
+      }
+    }
+  }
   void nextTick(() => {
     const list = talkList.value
     if (list) {

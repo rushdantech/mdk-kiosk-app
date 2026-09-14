@@ -13,9 +13,15 @@ function normalizeSpeech(text: string): string {
 
 export function inferBillScope(text: string): BillScope | null {
   const spoken = normalizeSpeech(text)
-  const tax = /cukai|taksiran|assessment|property tax|cukai pintu/.test(spoken)
   const summons =
-    /saman|kompaun|summons|summon|compound|\bplat\b|\bplate\b|parking|notis trafik/.test(spoken)
+    /saman|samen|kompaun|summons|summon|compound|\bplat\b|\bplate\b|parking|notis trafik|trafik/.test(
+      spoken,
+    )
+  const tax =
+    /cukai|taksiran|assessment|assessmen|property tax|cukai pintu|harta/.test(spoken) &&
+    !summons
+  const lookup =
+    /tengok|tenok|ten\s+e|lihat|semak|nak\s+(tengok|semak|lihat)|check|show/.test(spoken)
   const everything =
     /semua|ada bil|bil apa|bil saya|tengok bil|lihat bil|semak bil|check bill|check my bill|yang tertunggak|what i owe|what do i owe|all bills|senarai|rekod|outstanding|tunjuk|papar|show bill|show list|list bill/.test(
       spoken,
@@ -24,10 +30,13 @@ export function inferBillScope(text: string): BillScope | null {
   if ((tax && summons) || everything) {
     return 'all'
   }
-  if (tax) {
+  if (lookup && tax && summons) {
+    return 'all'
+  }
+  if (tax || (lookup && /cukai|taksiran|assessment|tax|harta/.test(spoken))) {
     return 'assessment'
   }
-  if (summons) {
+  if (summons || (lookup && /saman|samen|kompaun|summon|compound/.test(spoken))) {
     return 'compound'
   }
   return null

@@ -422,6 +422,7 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     const type = String(event.type ?? '')
 
     if (type.includes('input_audio_buffer.speech_started')) {
+      hooks.onUserSpoke()
       liveUser = ''
       hooks.onPhase('listening')
       emit(null, '', 'user')
@@ -482,8 +483,46 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       return
     }
 
+    if (type === 'response.function_call_arguments.done') {
+      const callId = String(event.call_id ?? '')
+      if (!callId || appliedToolKeys.has(callId)) {
+        return
+      }
+      const pending = pendingToolArgs.get(callId)
+      const name = typeof event.name === 'string' ? event.name : pending?.name
+      let rawArgs: unknown = event.arguments
+      if ((rawArgs === undefined || rawArgs === '') && pending?.args) {
+        try {
+          rawArgs = JSON.parse(pending.args)
+        } catch {
+          rawArgs = pending.args
+        }
+      }
+      pendingToolArgs.delete(callId)
+      if (!name) {
+        return
+      }
+      appliedToolKeys.add(callId)
+      const { scope, method } = parseToolArgs(rawArgs)
+      applyTool(name, scope, hooks, method)
+      channel?.send(
+        JSON.stringify({
+          type: 'conversation.item.create',
+          item: {
+            type: 'function_call_output',
+            call_id: callId,
+            output: JSON.stringify({
+              ok: true,
+              note: 'Stay on the call. Ask for confirmation before showing QR or the card terminal.',
+            }),
+          },
+        }),
+      )
+      channel?.send(JSON.stringify({ type: 'response.create' }))
+      return
+    }
+
     if (
-      type === 'response.function_call_arguments.done' ||
       type === 'response.output_item.done' ||
       type === 'response.done'
     ) {

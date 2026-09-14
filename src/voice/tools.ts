@@ -1,5 +1,5 @@
 export const SHOW_BILLS_DESC =
-  'Show bills on the kiosk screen only after the resident asks. Use assessment for cukai taksiran, compound for saman or kompaun, all if they ask for every bill. Stay in the conversation.'
+  'Required to display bills on the kiosk screen. Call this BEFORE telling the resident to look at the screen. Use assessment for cukai taksiran, compound for saman or kompaun, all if they ask for every bill.'
 
 export const START_PAYMENT_DESC =
   'Propose a payment method on the right side of the screen and keep talking. Use duitnow or card only to ask for confirmation — never jump straight to the QR or card terminal. Use choose if they want to pay but have not named a method.'
