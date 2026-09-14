@@ -157,6 +157,19 @@ const copy = {
     ms: 'Mencari cukai dan saman',
     en: 'Looking up assessment and summons',
   },
+  confirmRecordsTitle: { ms: 'Sahkan semakan', en: 'Confirm lookup' },
+  confirmRecordsAssessment: {
+    ms: 'Semak cukai taksiran dengan MyKad? Ketik Sahkan atau cakap ya.',
+    en: 'Check assessment tax with MyKad? Tap Confirm or say yes.',
+  },
+  confirmRecordsSummons: {
+    ms: 'Semak saman dengan MyKad? Ketik Sahkan atau cakap ya.',
+    en: 'Check summons with MyKad? Tap Confirm or say yes.',
+  },
+  confirmRecordsAll: {
+    ms: 'Semak semua bil dengan MyKad? Ketik Sahkan atau cakap ya.',
+    en: 'Check all bills with MyKad? Tap Confirm or say yes.',
+  },
   you: { ms: 'Anda', en: 'You' },
   assistant: { ms: 'Pembantu', en: 'Assistant' },
   summons: { ms: 'Saman', en: 'Summons' },

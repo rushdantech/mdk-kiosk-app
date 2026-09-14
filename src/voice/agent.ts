@@ -1,7 +1,7 @@
 import type { BillScope } from '../store/session'
 import { session } from '../store/session'
 import type { ChatLine } from '../types'
-import { inferBillScope, inferConfirm, inferPayChoice, type PayChoice } from './intent'
+import { inferConfirm, type PayChoice } from './intent'
 import { kioskInstructions } from './kiosk-prompt'
 import { browserChat, browserTts, mintRealtimeCredentials } from './openai-browser'
 import { realtimeToolDefs } from './tools'
@@ -69,16 +69,21 @@ function applyTool(
   hooks: VoiceHooks,
   method: PayChoice = 'choose',
 ): void {
-  if (name === 'show_bills') {
-    hooks.onRequestRecords(scope)
+  if (name === 'offer_records' || name === 'show_bills') {
+    hooks.onOfferRecords(scope)
     return
   }
-  if (name === 'start_payment' || name === 'choose_payment') {
+  if (name === 'confirm_records') {
+    if (hooks.canConfirmRecords()) {
+      hooks.onConfirmRecords()
+    }
+    return
+  }
+  if (name === 'offer_payment' || name === 'start_payment' || name === 'choose_payment') {
     if (!hooks.isRecordsReady()) {
-      hooks.onRequestRecords(scope)
       return
     }
-    hooks.onReadyToPay(method)
+    hooks.onOfferPayment(method)
     return
   }
   if (name === 'confirm_payment') {
@@ -87,8 +92,8 @@ function applyTool(
     }
     return
   }
-  if (name === 'cancel_payment') {
-    hooks.onCancelPayment()
+  if (name === 'cancel_action' || name === 'cancel_payment') {
+    hooks.onCancelPending()
   }
 }
 
@@ -116,10 +121,14 @@ function toolCallsFrom(event: Record<string, unknown>): Array<{
   const calls: Array<{ name: string; scope: BillScope; method: PayChoice; callId: string }> = []
   const consider = (name?: string, args?: unknown, callId?: string) => {
     if (
+      name !== 'offer_records' &&
       name !== 'show_bills' &&
+      name !== 'confirm_records' &&
+      name !== 'offer_payment' &&
       name !== 'start_payment' &&
       name !== 'choose_payment' &&
       name !== 'confirm_payment' &&
+      name !== 'cancel_action' &&
       name !== 'cancel_payment'
     ) {
       return
@@ -171,12 +180,14 @@ export type CaptionFrom = 'bot' | 'user'
 type VoiceHooks = {
   onPhase: (phase: AgentPhase) => void
   onCaption: (line: ChatLine | null, interim?: string, from?: CaptionFrom) => void
-  onRequestRecords: (scope: BillScope) => void
+  onOfferRecords: (scope: BillScope) => void
+  canConfirmRecords: () => boolean
+  onConfirmRecords: () => void
   isRecordsReady: () => boolean
-  onReadyToPay: (method: PayChoice) => void
+  onOfferPayment: (method: PayChoice) => void
   canConfirmPayment: () => boolean
   onConfirmPayment: () => void
-  onCancelPayment: () => void
+  onCancelPending: () => void
   onError: (message: string) => void
 }
 
@@ -251,24 +262,17 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     }
     const confirm = inferConfirm(spoken)
     if (confirm === false) {
-      hooks.onCancelPayment()
+      hooks.onCancelPending()
       return
     }
-    const scope = inferBillScope(spoken)
-    const pay = inferPayChoice(spoken)
-    if (pay && !hooks.isRecordsReady()) {
-      applyTool('show_bills', scope ?? 'all', hooks)
+    if (confirm !== true) {
       return
     }
-    if (scope && !hooks.isRecordsReady()) {
-      applyTool('show_bills', scope, hooks)
+    if (hooks.canConfirmRecords()) {
+      hooks.onConfirmRecords()
       return
     }
-    if (pay) {
-      applyTool('start_payment', scope ?? 'all', hooks, pay)
-      return
-    }
-    if (confirm === true && hooks.canConfirmPayment()) {
+    if (hooks.canConfirmPayment()) {
       hooks.onConfirmPayment()
     }
   }
@@ -446,8 +450,8 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     if (type.includes('input_audio_transcription')) {
       liveUser = eventText(event, liveUser)
       emit(null, liveUser, 'user')
-      applySpokenIntent(liveUser)
       if (type.includes('completed') || type.endsWith('.done')) {
+        applySpokenIntent(liveUser)
         finishUser()
       }
       return
@@ -509,7 +513,7 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
                 call_id: call.callId,
                 output: JSON.stringify({
                   ok: true,
-                  note: 'Stay on the call. Ask for confirmation before showing QR or the card terminal.',
+                  note: 'Stay on the call. Never change the screen without a clear yes from the resident.',
                 }),
               },
             }),
@@ -530,7 +534,7 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
               call_id: fallbackCallId,
               output: JSON.stringify({
                 ok: true,
-                note: 'Stay on the call. Ask for confirmation before showing QR or the card terminal.',
+                note: 'Stay on the call. Never change the screen without a clear yes from the resident.',
               }),
             },
           }),
@@ -627,7 +631,6 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       }
       if (!last.isFinal) {
         emit(null, spoken, 'user')
-        applySpokenIntent(spoken)
         return
       }
       emit(userLine(spoken), '', 'user')

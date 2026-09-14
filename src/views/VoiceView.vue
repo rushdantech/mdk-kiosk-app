@@ -19,7 +19,7 @@ import {
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
-import { inferBillScope, inferConfirm, inferPayChoice, type PayChoice } from '../voice/intent'
+import { inferConfirm, type PayChoice } from '../voice/intent'
 
 type PayStage = 'bills' | 'confirm' | 'duitnow' | 'card'
 type DeskPhase = 'talk' | 'mykad' | 'query' | 'ready'
@@ -35,6 +35,7 @@ const error = ref('')
 const talkList = ref<HTMLOListElement | null>(null)
 const deskPhase = ref<DeskPhase>('talk')
 const pendingScope = ref<BillScope>('all')
+const pendingRecords = ref<BillScope | null>(null)
 const queryStep = ref(0)
 const payStage = ref<PayStage>('bills')
 const pendingMethod = ref<PayMethod | null>(null)
@@ -62,14 +63,34 @@ function showBills(scope: BillScope = 'all'): void {
   revealCitizenBills('voice', scope)
 }
 
-function beginMykad(scope: BillScope = 'all'): void {
+function offerRecords(scope: BillScope = 'all'): void {
   if (deskPhase.value === 'ready') {
     showBills(scope)
     return
   }
+  pendingRecords.value = scope
   pendingScope.value = scope
+}
+
+function recordsConfirmReady(): boolean {
+  return pendingRecords.value !== null && deskPhase.value === 'talk'
+}
+
+function confirmRecords(): void {
+  if (!recordsConfirmReady()) {
+    return
+  }
+  pendingScope.value = pendingRecords.value ?? 'all'
+  pendingRecords.value = null
   deskPhase.value = 'mykad'
   window.clearTimeout(mykadAuto)
+}
+
+function cancelPending(): void {
+  pendingRecords.value = null
+  if (payStage.value === 'confirm' || paying.value) {
+    cancelPay()
+  }
 }
 
 function startMykadQuery(): void {
@@ -95,7 +116,7 @@ function clearMykadTimers(): void {
   window.clearTimeout(queryDone)
 }
 
-function proposePay(method: PayChoice): void {
+function offerPayment(method: PayChoice): void {
   if (deskPhase.value !== 'ready') {
     return
   }
@@ -161,14 +182,20 @@ const runtime = createVoiceRuntime({
       captions.value = [...captions.value, line].slice(-8)
     }
   },
-  onRequestRecords(scope: BillScope) {
-    beginMykad(scope)
+  onOfferRecords(scope: BillScope) {
+    offerRecords(scope)
+  },
+  canConfirmRecords() {
+    return recordsConfirmReady()
+  },
+  onConfirmRecords() {
+    confirmRecords()
   },
   isRecordsReady() {
     return deskPhase.value === 'ready'
   },
-  onReadyToPay(method: PayChoice) {
-    proposePay(method)
+  onOfferPayment(method: PayChoice) {
+    offerPayment(method)
   },
   canConfirmPayment() {
     return paymentConfirmReady()
@@ -176,10 +203,8 @@ const runtime = createVoiceRuntime({
   onConfirmPayment() {
     confirmPay()
   },
-  onCancelPayment() {
-    if (payStage.value === 'confirm' || paying.value) {
-      cancelPay()
-    }
+  onCancelPending() {
+    cancelPending()
   },
   onError(message) {
     agentReady.value = true
@@ -221,44 +246,33 @@ function who(from: CaptionFrom): string {
   return from === 'user' ? tx.value('you') : tx.value('assistant')
 }
 
-watch([captions, interim], () => {
+watch(captions, () => {
   const lastUser = [...captions.value].reverse().find((line) => line.from === 'user')
-  const spoken = `${interim.value} ${lastUser ? lineText(lastUser) : ''}`
-
-  if (deskPhase.value === 'talk') {
-    const scope = inferBillScope(spoken)
-    if (scope) {
-      beginMykad(scope)
-    }
+  if (!lastUser) {
     return
   }
-
-  if (deskPhase.value !== 'ready') {
+  const answer = inferConfirm(lineText(lastUser))
+  if (answer === false) {
+    cancelPending()
     return
   }
-
-  if (payStage.value === 'confirm') {
-    const switchMethod = inferPayChoice(spoken)
-    if (switchMethod === 'duitnow' || switchMethod === 'card') {
-      proposePay(switchMethod)
-    } else {
-      const answer = inferConfirm(spoken)
-      if (answer === true) {
-        confirmPay()
-      } else if (answer === false) {
-        cancelPay()
-      }
-    }
-  } else {
-    const payMethod = inferPayChoice(spoken)
-    if (payMethod === 'duitnow' || payMethod === 'card') {
-      proposePay(payMethod)
-    } else if (payMethod === 'choose') {
-      payStage.value = 'bills'
-      pendingMethod.value = null
+  if (answer === true) {
+    if (recordsConfirmReady()) {
+      confirmRecords()
+    } else if (paymentConfirmReady()) {
+      confirmPay()
     }
   }
 
+  void nextTick(() => {
+    const list = talkList.value
+    if (list) {
+      list.scrollTop = list.scrollHeight
+    }
+  })
+})
+
+watch(interim, () => {
   void nextTick(() => {
     const list = talkList.value
     if (list) {
@@ -280,6 +294,16 @@ const listTitle = computed(() => {
 const confirmCopy = computed(() =>
   pendingMethod.value === 'card' ? tx.value('confirmCard') : tx.value('confirmDuitnow'),
 )
+
+const recordsConfirmCopy = computed(() => {
+  if (pendingRecords.value === 'assessment') {
+    return tx.value('confirmRecordsAssessment')
+  }
+  if (pendingRecords.value === 'compound') {
+    return tx.value('confirmRecordsSummons')
+  }
+  return tx.value('confirmRecordsAll')
+})
 
 onMounted(() => {
   void runtime.start()
@@ -338,13 +362,13 @@ onUnmounted(() => {
         </li>
       </ol>
 
-      <div v-if="deskPhase === 'talk'" class="voice-quick">
-        <button type="button" class="ghost" @click="beginMykad('assessment')">
-          {{ tx('assessment') }}
-        </button>
-        <button type="button" class="ghost" @click="beginMykad('compound')">
-          {{ tx('summons') }}
-        </button>
+      <div v-if="pendingRecords && deskPhase === 'talk'" class="confirm-pay voice-confirm">
+        <p class="ic">{{ tx('confirmRecordsTitle') }}</p>
+        <p class="lead">{{ recordsConfirmCopy }}</p>
+        <div class="actions">
+          <button type="button" class="ghost" @click="cancelPending">{{ tx('confirmNo') }}</button>
+          <button type="button" class="solid" @click="confirmRecords">{{ tx('confirmYes') }}</button>
+        </div>
       </div>
 
       <div v-if="deskPhase === 'mykad'" class="voice-mykad slot-card">
@@ -459,7 +483,7 @@ onUnmounted(() => {
               type="button"
               class="pay"
               :disabled="session.selected.size === 0"
-              @click="proposePay('duitnow')"
+              @click="offerPayment('duitnow')"
             >
               {{ tx('duitnow') }}
             </button>
@@ -467,7 +491,7 @@ onUnmounted(() => {
               type="button"
               class="pay"
               :disabled="session.selected.size === 0"
-              @click="proposePay('card')"
+              @click="offerPayment('card')"
             >
               {{ tx('card') }}
             </button>

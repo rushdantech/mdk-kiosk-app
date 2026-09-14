@@ -1,21 +1,24 @@
-export const SHOW_BILLS_DESC =
-  'The resident asked about their records. Use assessment for cukai taksiran, compound for saman or kompaun, all if they ask for every bill. This opens the MyKad reader — tell them to insert MyKad. Do not say the bill list is visible yet.'
+export const OFFER_RECORDS_DESC =
+  'The resident asked to check records. Use assessment for cukai taksiran, compound for saman or kompaun, all for both. This only prepares a confirmation question — do not show MyKad or any list yet. Ask them to confirm first.'
 
-export const START_PAYMENT_DESC =
-  'Propose a payment method on the right side of the screen and keep talking. Use duitnow or card only to ask for confirmation — never jump straight to the QR or card terminal. Use choose if they want to pay but have not named a method.'
+export const CONFIRM_RECORDS_DESC =
+  'The resident clearly said yes to checking records with MyKad. Call this only after they confirm. This shows the MyKad reader.'
+
+export const OFFER_PAYMENT_DESC =
+  'The resident named a pay method. Use duitnow or card to ask for confirmation only — never show the QR or card terminal yet. Use choose if they want to pay but have not named a method.'
 
 export const CONFIRM_PAYMENT_DESC =
-  'The resident confirmed. Show the DuitNow QR or card terminal on the right. Stay on the call and keep talking.'
+  'The resident clearly confirmed payment. Show the DuitNow QR or card terminal. Call only after they say yes.'
 
-export const CANCEL_PAYMENT_DESC =
-  'The resident cancelled the payment method. Return to the bill list and keep talking.'
+export const CANCEL_ACTION_DESC =
+  'The resident cancelled or said no. Clear any pending MyKad or payment step and stay in conversation.'
 
 export function realtimeToolDefs() {
   return [
     {
       type: 'function',
-      name: 'show_bills',
-      description: SHOW_BILLS_DESC,
+      name: 'offer_records',
+      description: OFFER_RECORDS_DESC,
       parameters: {
         type: 'object',
         properties: {
@@ -26,8 +29,14 @@ export function realtimeToolDefs() {
     },
     {
       type: 'function',
-      name: 'start_payment',
-      description: START_PAYMENT_DESC,
+      name: 'confirm_records',
+      description: CONFIRM_RECORDS_DESC,
+      parameters: { type: 'object', properties: {} },
+    },
+    {
+      type: 'function',
+      name: 'offer_payment',
+      description: OFFER_PAYMENT_DESC,
       parameters: {
         type: 'object',
         properties: {
@@ -44,8 +53,8 @@ export function realtimeToolDefs() {
     },
     {
       type: 'function',
-      name: 'cancel_payment',
-      description: CANCEL_PAYMENT_DESC,
+      name: 'cancel_action',
+      description: CANCEL_ACTION_DESC,
       parameters: { type: 'object', properties: {} },
     },
   ]
