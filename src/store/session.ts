@@ -33,6 +33,16 @@ export function loadCitizenBills(channel: Channel, scope: BillScope = 'all'): vo
   session.receiptNo = ''
 }
 
+export function revealCitizenBills(channel: Channel, scope: BillScope = 'all'): void {
+  const hadAssessment = session.bills.some((bill) => bill.kind === 'assessment')
+  const hadCompound = session.bills.some((bill) => bill.kind === 'compound')
+  const mergeAll =
+    scope === 'all' ||
+    (scope === 'compound' && hadAssessment) ||
+    (scope === 'assessment' && hadCompound)
+  loadCitizenBills(channel, mergeAll ? 'all' : scope)
+}
+
 export function loadBills(bills: Bill[], channel: Channel): void {
   session.channel = channel
   session.citizen = { ...DEMO_CITIZEN }

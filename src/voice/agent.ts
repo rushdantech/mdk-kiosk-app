@@ -1,6 +1,7 @@
-import { loadCitizenBills, type BillScope } from '../store/session'
+import { revealCitizenBills, type BillScope } from '../store/session'
 import { session } from '../store/session'
 import type { ChatLine } from '../types'
+import { inferBillScope, inferPayChoice, type PayChoice } from './intent'
 import { kioskInstructions } from './kiosk-prompt'
 import { browserChat, browserTts, mintRealtimeCredentials } from './openai-browser'
 
@@ -54,15 +55,29 @@ function parseScope(value: unknown): BillScope {
   return 'all'
 }
 
-function applyTool(name: string, scope: BillScope, hooks: VoiceHooks): void {
+function parsePayChoice(value: unknown): PayChoice {
+  if (value === 'duitnow' || value === 'card' || value === 'choose') {
+    return value
+  }
+  return 'choose'
+}
+
+function applyTool(
+  name: string,
+  scope: BillScope,
+  hooks: VoiceHooks,
+  method: PayChoice = 'choose',
+): void {
   if (name === 'show_bills') {
-    loadCitizenBills('voice', scope)
+    revealCitizenBills('voice', scope)
     hooks.onShowBills(scope)
     return
   }
   if (name === 'start_payment') {
-    loadCitizenBills('voice', scope)
-    hooks.onReadyToPay()
+    if (!session.bills.length) {
+      revealCitizenBills('voice', scope)
+    }
+    hooks.onReadyToPay(method)
   }
 }
 
@@ -71,7 +86,7 @@ export type CaptionFrom = 'bot' | 'user'
 type VoiceHooks = {
   onPhase: (phase: AgentPhase) => void
   onCaption: (line: ChatLine | null, interim?: string, from?: CaptionFrom) => void
-  onReadyToPay: () => void
+  onReadyToPay: (method: PayChoice) => void
   onShowBills: (scope: BillScope) => void
   onError: (message: string) => void
 }
@@ -139,6 +154,19 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     hooks.onCaption(line, live, from)
   }
 
+  function applySpokenIntent(spoken: string): boolean {
+    const pay = inferPayChoice(spoken)
+    if (pay === 'duitnow' || pay === 'card') {
+      applyTool('start_payment', inferBillScope(spoken) ?? 'all', hooks, pay)
+      return true
+    }
+    const scope = inferBillScope(spoken)
+    if (scope) {
+      applyTool('show_bills', scope, hooks)
+    }
+    return pay === 'choose'
+  }
+
   function flushBotSentences(): void {
     const { done, rest } = takeCompleteSentences(liveBot)
     liveBot = rest
@@ -167,6 +195,7 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     liveUser = ''
     if (spoken) {
       emit(userLine(spoken), '', 'user')
+      applySpokenIntent(spoken)
       return
     }
     emit(null, '', 'user')
@@ -218,8 +247,18 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       {
         type: 'function',
         name: 'start_payment',
-        description: 'Open the payment screen.',
-        parameters: { type: 'object', properties: {} },
+        description:
+          'Hand the resident to the payment screen and stop talking. Use duitnow for DuitNow QR, card for credit/debit card, choose if they did not name a method.',
+        parameters: {
+          type: 'object',
+          properties: {
+            method: {
+              type: 'string',
+              enum: ['duitnow', 'card', 'choose'],
+            },
+          },
+          required: ['method'],
+        },
       },
     ]
   }
@@ -357,16 +396,22 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       const item = event.item as { name?: string; arguments?: string } | undefined
       const name = String((event.name as string | undefined) ?? item?.name ?? '')
       let scope: BillScope = 'all'
+      let method: PayChoice = 'choose'
       const rawArgs = event.arguments ?? item?.arguments
       if (typeof rawArgs === 'string' && rawArgs.trim()) {
         try {
-          scope = parseScope((JSON.parse(rawArgs) as { kind?: unknown }).kind)
+          const parsed = JSON.parse(rawArgs) as { kind?: unknown; method?: unknown }
+          scope = parseScope(parsed.kind)
+          method = parsePayChoice(parsed.method)
         } catch {
           scope = 'all'
         }
       }
       if (name === 'show_bills' || name === 'start_payment') {
-        applyTool(name, scope, hooks)
+        applyTool(name, scope, hooks, method)
+        if (name === 'start_payment') {
+          return
+        }
         channel?.send(
           JSON.stringify({
             type: 'conversation.item.create',
@@ -425,7 +470,10 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     chatHistory.push({ role: 'user', content: heard })
     chatHistory.push({ role: 'assistant', content: text })
     if (data.tool) {
-      applyTool(data.tool, parseScope(data.kind), hooks)
+      applyTool(data.tool, parseScope(data.kind), hooks, parsePayChoice(data.method))
+      if (data.tool === 'start_payment') {
+        return
+      }
     }
     await speakWithOpenAi(text)
     speaking = false
@@ -469,6 +517,9 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       }
       emit(userLine(spoken), '', 'user')
       recognition?.stop()
+      if (applySpokenIntent(spoken) && inferPayChoice(spoken) !== 'choose') {
+        return
+      }
       void askModel(spoken)
         .catch((error: unknown) => {
           hooks.onError(error instanceof Error ? error.message : 'Model error')

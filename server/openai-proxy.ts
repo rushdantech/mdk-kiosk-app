@@ -142,8 +142,18 @@ export function openaiProxy(apiKey: string): Plugin {
                 type: 'function',
                 function: {
                   name: 'start_payment',
-                  description: 'Open the payment screen so the resident can pay.',
-                  parameters: { type: 'object', properties: {} },
+                  description:
+                    'Hand the resident to payment and stop talking. Use duitnow for DuitNow QR, card for credit/debit card, choose if they did not name a method.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      method: {
+                        type: 'string',
+                        enum: ['duitnow', 'card', 'choose'],
+                      },
+                    },
+                    required: ['method'],
+                  },
                 },
               },
             ],
@@ -161,11 +171,15 @@ export function openaiProxy(apiKey: string): Plugin {
           const message = choices[0]?.message
           const toolCall = message?.tool_calls?.[0]?.function
           let kind: string | null = null
+          let method: string | null = null
           if (toolCall?.arguments) {
             try {
-              kind = String(
-                (JSON.parse(toolCall.arguments) as { kind?: string }).kind ?? '',
-              ) || null
+              const parsed = JSON.parse(toolCall.arguments) as {
+                kind?: string
+                method?: string
+              }
+              kind = parsed.kind || null
+              method = parsed.method || null
             } catch {
               kind = null
             }
@@ -178,6 +192,7 @@ export function openaiProxy(apiKey: string): Plugin {
                 : 'Okay. I am still here. Just speak.'),
             tool: toolCall?.name ?? null,
             kind,
+            method,
           })
           return
         }

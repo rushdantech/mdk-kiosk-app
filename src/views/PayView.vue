@@ -1,20 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { money } from '../data/fixtures'
 import { useT } from '../i18n'
 import { finishPayment, loadCitizenBills, selectedTotal, session } from '../store/session'
 import type { PayMethod } from '../types'
 
 const router = useRouter()
+const route = useRoute()
 const tx = useT()
 const method = ref<PayMethod | null>(null)
 const seconds = ref(300)
 let tick = 0
 
 onMounted(() => {
-  if (!session.citizen) {
+  if (!session.citizen || session.bills.length === 0) {
     loadCitizenBills(session.channel)
+  }
+  const requested = route.query.method
+  if (requested === 'duitnow' || requested === 'card') {
+    choose(requested)
   }
 })
 

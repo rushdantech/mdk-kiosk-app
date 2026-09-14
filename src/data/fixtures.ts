@@ -111,3 +111,11 @@ export function money(value: number): string {
 export function maskIc(ic: string): string {
   return `${ic.slice(0, 6)}-••-••••`
 }
+
+export function formatIc(ic: string): string {
+  const digits = ic.replace(/\D/g, '')
+  if (digits.length < 12) {
+    return ic
+  }
+  return `${digits.slice(0, 6)}-${digits.slice(6, 8)}-${digits.slice(8, 12)}`
+}

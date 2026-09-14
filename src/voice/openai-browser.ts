@@ -89,7 +89,7 @@ export async function mintRealtimeCredentials(lang: 'ms' | 'en'): Promise<{
 export async function browserChat(
   lang: 'ms' | 'en',
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
-): Promise<{ text: string; tool: string | null; kind: BillScope | null }> {
+): Promise<{ text: string; tool: string | null; kind: BillScope | null; method: string | null }> {
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
@@ -101,6 +101,7 @@ export async function browserChat(
         text: string
         tool: string | null
         kind: BillScope | null
+        method: string | null
       }
     }
   } catch {
@@ -142,8 +143,18 @@ export async function browserChat(
           type: 'function',
           function: {
             name: 'start_payment',
-            description: 'Open the payment screen so the resident can pay.',
-            parameters: { type: 'object', properties: {} },
+            description:
+              'Hand the resident to payment and stop talking. Use duitnow for DuitNow QR, card for credit/debit card, choose if they did not name a method.',
+            parameters: {
+              type: 'object',
+              properties: {
+                method: {
+                  type: 'string',
+                  enum: ['duitnow', 'card', 'choose'],
+                },
+              },
+              required: ['method'],
+            },
           },
         },
       ],
@@ -163,10 +174,12 @@ export async function browserChat(
   const message = data.choices?.[0]?.message
   const toolCall = message?.tool_calls?.[0]?.function
   let kind: BillScope | null = null
+  let method: string | null = null
   if (toolCall?.arguments) {
     try {
-      const parsed = JSON.parse(toolCall.arguments) as { kind?: BillScope }
+      const parsed = JSON.parse(toolCall.arguments) as { kind?: BillScope; method?: string }
       kind = parsed.kind ?? null
+      method = parsed.method ?? null
     } catch {
       kind = null
     }
@@ -179,6 +192,7 @@ export async function browserChat(
         : 'Okay. I am still here. Just speak.'),
     tool: toolCall?.name ?? null,
     kind,
+    method,
   }
 }
 

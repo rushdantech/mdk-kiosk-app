@@ -11,6 +11,7 @@ import {
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
+import type { PayChoice } from '../voice/intent'
 
 const router = useRouter()
 const tx = useT()
@@ -42,12 +43,15 @@ const runtime = createVoiceRuntime({
   onShowBills() {
     revealed.value = true
   },
-  onReadyToPay() {
+  onReadyToPay(method: PayChoice) {
     readyToPay.value = true
     revealed.value = true
-    window.setTimeout(() => {
-      void router.push('/pay')
-    }, 1800)
+    runtime.stop()
+    if (method === 'duitnow' || method === 'card') {
+      void router.push({ path: '/pay', query: { method } })
+      return
+    }
+    void router.push('/pay')
   },
   onError(message) {
     error.value = message || tx.value('voiceError')

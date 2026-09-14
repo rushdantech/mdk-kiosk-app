@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { money } from '../data/fixtures'
+import { formatIc, money } from '../data/fixtures'
 import { billDate, billDetail, billTitle, useT } from '../i18n'
 import {
   clearBills,
@@ -38,6 +38,9 @@ function goPay(): void {
       <div>
         <p class="ic">{{ tx('billsHello') }}</p>
         <h1>{{ session.citizen?.name }}</h1>
+        <p v-if="session.citizen" class="id-line">
+          {{ tx('mykadNo') }} {{ formatIc(session.citizen.ic) }}
+        </p>
         <p class="lead">{{ tx('billsLead') }}</p>
       </div>
       <div class="actions">
@@ -65,7 +68,7 @@ function goPay(): void {
         <span class="amount">RM {{ money(bill.amount) }}</span>
       </button>
 
-      <p v-if="compounds.length" class="ic">{{ tx('compound') }}</p>
+      <p v-if="compounds.length" class="ic">{{ tx('summons') }}</p>
       <button
         v-for="bill in compounds"
         :key="bill.id"

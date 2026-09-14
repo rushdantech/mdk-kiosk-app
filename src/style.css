@@ -336,6 +336,84 @@ a.door {
   animation: blink 1s step-end infinite;
 }
 
+.query-stage {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 18px;
+}
+
+.query-orb {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+
+.query-ring,
+.query-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+}
+
+.query-ring {
+  border: 4px solid rgba(28, 74, 51, 0.18);
+  border-top-color: var(--padi);
+  animation: query-spin 0.9s linear infinite;
+}
+
+.query-core {
+  inset: 28px;
+  background: radial-gradient(circle at 35% 30%, #f6e7b0, #1c4a33);
+}
+
+.query-step {
+  font-family: var(--display);
+  font-size: 30px;
+}
+
+.query-bar {
+  width: min(420px, 100%);
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--paper-2);
+}
+
+.query-bar span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--padi);
+  animation: query-slide 1.2s ease-in-out infinite;
+}
+
+.id-line {
+  margin-top: 10px;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+@keyframes query-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes query-slide {
+  0% {
+    transform: translateX(-20%);
+  }
+  50% {
+    transform: translateX(160%);
+  }
+  100% {
+    transform: translateX(-20%);
+  }
+}
+
 .actions {
   display: flex;
   gap: 14px;
