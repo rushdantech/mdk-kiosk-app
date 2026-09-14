@@ -1,6 +1,8 @@
 import { loadCitizenBills, type BillScope } from '../store/session'
 import { session } from '../store/session'
 import type { ChatLine } from '../types'
+import { kioskInstructions } from './kiosk-prompt'
+import { browserChat, browserTts, mintRealtimeCredentials } from './openai-browser'
 
 export type AgentPhase = 'connecting' | 'speaking' | 'listening' | 'thinking'
 
@@ -195,29 +197,36 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     }
   }
 
+  function realtimeTools() {
+    return [
+      {
+        type: 'function',
+        name: 'show_bills',
+        description:
+          'Show bills on screen only after the resident asks. Use assessment for cukai taksiran, compound for saman/kompaun, all if they ask for everything.',
+        parameters: {
+          type: 'object',
+          properties: {
+            kind: {
+              type: 'string',
+              enum: ['assessment', 'compound', 'all'],
+            },
+          },
+          required: ['kind'],
+        },
+      },
+      {
+        type: 'function',
+        name: 'start_payment',
+        description: 'Open the payment screen.',
+        parameters: { type: 'object', properties: {} },
+      },
+    ]
+  }
+
   async function startRealtime(): Promise<void> {
     hooks.onPhase('connecting')
-    const sessionRes = await fetch('/api/realtime/session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lang: session.lang }),
-    })
-    const sessionJson = (await sessionRes.json()) as {
-      client_secret?: { value?: string } | string
-      value?: string
-      model?: string
-      error?: unknown
-    }
-    if (!sessionRes.ok) {
-      throw new Error('Realtime session unavailable')
-    }
-    const ephemeral =
-      typeof sessionJson.client_secret === 'string'
-        ? sessionJson.client_secret
-        : sessionJson.client_secret?.value ?? sessionJson.value
-    if (!ephemeral) {
-      throw new Error('No ephemeral key')
-    }
+    const { token: ephemeral, model } = await mintRealtimeCredentials(session.lang)
 
     remoteAudio = new Audio()
     remoteAudio.autoplay = true
@@ -243,31 +252,9 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
         JSON.stringify({
           type: 'session.update',
           session: {
+            instructions: kioskInstructions(session.lang),
             turn_detection: { type: 'server_vad' },
-            tools: [
-              {
-                type: 'function',
-                name: 'show_bills',
-                description:
-                  'Show bills on screen only after the resident asks. Use assessment for cukai taksiran, compound for saman/kompaun, all if they ask for everything.',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    kind: {
-                      type: 'string',
-                      enum: ['assessment', 'compound', 'all'],
-                    },
-                  },
-                  required: ['kind'],
-                },
-              },
-              {
-                type: 'function',
-                name: 'start_payment',
-                description: 'Open the payment screen.',
-                parameters: { type: 'object', properties: {} },
-              },
-            ],
+            tools: realtimeTools(),
             tool_choice: 'auto',
           },
         }),
@@ -287,7 +274,6 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
 
     const offer = await peer.createOffer()
     await peer.setLocalDescription(offer)
-    const model = sessionJson.model ?? 'gpt-realtime-mini'
     const endpoints = [
       'https://api.openai.com/v1/realtime/calls',
       `https://api.openai.com/v1/realtime?model=${encodeURIComponent(model)}`,
@@ -401,13 +387,8 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     hooks.onPhase('speaking')
     finishBot(text)
     try {
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      })
-      if (response.ok) {
-        const blob = await response.blob()
+      const blob = await browserTts(text)
+      if (blob) {
         const url = URL.createObjectURL(blob)
         await new Promise<void>((resolve) => {
           const audio = new Audio(url)
@@ -436,22 +417,10 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
 
   async function askModel(heard: string): Promise<void> {
     hooks.onPhase('thinking')
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        lang: session.lang,
-        messages: [...chatHistory, { role: 'user', content: heard }],
-      }),
-    })
-    if (!response.ok) {
-      throw new Error('Chat failed')
-    }
-    const data = (await response.json()) as {
-      text?: string
-      tool?: string | null
-      kind?: BillScope | null
-    }
+    const data = await browserChat(session.lang, [
+      ...chatHistory,
+      { role: 'user', content: heard },
+    ])
     const text = data.text ?? ''
     chatHistory.push({ role: 'user', content: heard })
     chatHistory.push({ role: 'assistant', content: text })

@@ -20,7 +20,7 @@ npm run dev
 
 Open the local URL and use the kiosk at a large viewport (around 1440×900 or 1920×1080).
 
-For the live voice assistant, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. The key stays on the local Vite server and is not published to GitHub Pages.
+For the live voice assistant, copy `.env.example` to `.env` and set `OPENAI_API_KEY`. Locally the key stays on the Vite server. GitHub Pages injects the same secret at build time so the voice agent can connect.
 
 ## GitHub Pages
 
