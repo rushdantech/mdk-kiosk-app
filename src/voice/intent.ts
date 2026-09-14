@@ -53,3 +53,28 @@ export function inferPayChoice(text: string): PayChoice | null {
   }
   return null
 }
+
+export function inferConfirm(text: string): boolean | null {
+  const spoken = normalizeSpeech(text)
+  if (!spoken) {
+    return null
+  }
+  const short = spoken.split(' ').length <= 4
+  if (
+    /batal|cancel|kembali|\bback\b|jangan papar|tak mahu|tak nak|tak sah|\bno\b/.test(spoken)
+  ) {
+    return false
+  }
+  if (short && /\btidak\b|\bjangan\b|\bnanti\b/.test(spoken)) {
+    return false
+  }
+  if (
+    short &&
+    /\bya\b|\byes\b|\bok\b|\bokay\b|\bsah\b|sahkan|confirm|setuju|teruskan|betul|agree|paparkan/.test(
+      spoken,
+    )
+  ) {
+    return true
+  }
+  return null
+}

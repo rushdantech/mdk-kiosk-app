@@ -52,12 +52,60 @@ export const DEMO_BILLS: Bill[] = [
 
 export const SCAN_TARGETS: Record<string, string> = {
   'T-070017708-08': 'asm-7708',
+  T07001770808: 'asm-7708',
+  ID0117708: 'asm-7708',
   K58260902003: 'cmp-tlk',
+  SB4811K: 'cmp-tlk',
   K02M250716001: 'cmp-lesen',
 }
 
+export const SCAN_CODES: Array<{
+  code: string
+  billId: string
+  labelMs: string
+  labelEn: string
+}> = [
+  {
+    code: 'T-070017708-08',
+    billId: 'asm-7708',
+    labelMs: 'Cukai taksiran — no. akaun',
+    labelEn: 'Assessment tax — account no.',
+  },
+  {
+    code: 'K58260902003',
+    billId: 'cmp-tlk',
+    labelMs: 'Saman trafik — no. notis',
+    labelEn: 'Traffic summons — notice no.',
+  },
+  {
+    code: 'SB4811K',
+    billId: 'cmp-tlk',
+    labelMs: 'Saman trafik — no. plat',
+    labelEn: 'Traffic summons — plate',
+  },
+  {
+    code: 'K02M250716001',
+    billId: 'cmp-lesen',
+    labelMs: 'Saman bukan trafik — no. notis',
+    labelEn: 'Non-traffic summons — notice no.',
+  },
+]
+
 export function normalizeKey(value: string): string {
-  return value.replace(/[\s._]/g, '').toUpperCase()
+  return value.replace(/[\s._\-]/g, '').toUpperCase()
+}
+
+export function findBillByScanCode(raw: string): Bill | null {
+  const key = normalizeKey(raw)
+  if (!key) {
+    return null
+  }
+  const aliases: Record<string, string> = {}
+  for (const [code, billId] of Object.entries(SCAN_TARGETS)) {
+    aliases[normalizeKey(code)] = billId
+  }
+  const billId = aliases[key]
+  return DEMO_BILLS.find((bill) => bill.id === billId) ?? null
 }
 
 export function findBills(query: {

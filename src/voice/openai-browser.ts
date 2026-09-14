@@ -1,5 +1,6 @@
 import { kioskInstructions } from './kiosk-prompt'
 import type { BillScope } from '../store/session'
+import { chatToolDefs } from './tools'
 
 const REALTIME_MODELS = [
   'gpt-realtime-mini',
@@ -123,41 +124,7 @@ export async function browserChat(
       model: 'gpt-4o-mini',
       temperature: 0.4,
       messages: [{ role: 'system', content: kioskInstructions(lang) }, ...messages],
-      tools: [
-        {
-          type: 'function',
-          function: {
-            name: 'show_bills',
-            description:
-              'Show bills on the kiosk screen only after the resident asks. Use assessment for cukai taksiran, compound for saman or kompaun, all if they ask for every bill.',
-            parameters: {
-              type: 'object',
-              properties: {
-                kind: { type: 'string', enum: ['assessment', 'compound', 'all'] },
-              },
-              required: ['kind'],
-            },
-          },
-        },
-        {
-          type: 'function',
-          function: {
-            name: 'start_payment',
-            description:
-              'Hand the resident to payment and stop talking. Use duitnow for DuitNow QR, card for credit/debit card, choose if they did not name a method.',
-            parameters: {
-              type: 'object',
-              properties: {
-                method: {
-                  type: 'string',
-                  enum: ['duitnow', 'card', 'choose'],
-                },
-              },
-              required: ['method'],
-            },
-          },
-        },
-      ],
+      tools: chatToolDefs(),
     }),
   })
   if (!result.ok) {

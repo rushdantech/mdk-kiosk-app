@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { kioskInstructions } from './kiosk-prompt.ts'
+import { chatToolDefs } from '../src/voice/tools.ts'
 
 const REALTIME_MODELS = [
   'gpt-realtime-mini',
@@ -32,16 +33,24 @@ async function openaiJson(
   path: string,
   body: unknown,
 ): Promise<{ ok: boolean; status: number; data: Record<string, unknown> }> {
-  const response = await fetch(`https://api.openai.com/v1${path}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  })
-  const data = (await response.json()) as Record<string, unknown>
-  return { ok: response.ok, status: response.status, data }
+  try {
+    const response = await fetch(`https://api.openai.com/v1${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+    const data = (await response.json()) as Record<string, unknown>
+    return { ok: response.ok, status: response.status, data }
+  } catch (error) {
+    return {
+      ok: false,
+      status: 502,
+      data: { error: error instanceof Error ? error.message : 'OpenAI request failed' },
+    }
+  }
 }
 
 export function openaiProxy(apiKey: string): Plugin {
@@ -49,6 +58,26 @@ export function openaiProxy(apiKey: string): Plugin {
     name: 'openai-proxy',
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        try {
+          await handleProxy(req, res, next, apiKey)
+        } catch (error) {
+          if (!res.headersSent) {
+            json(res, 502, {
+              error: error instanceof Error ? error.message : 'Proxy failed',
+            })
+          }
+        }
+      })
+    },
+  }
+}
+
+async function handleProxy(
+  req: IncomingMessage,
+  res: ServerResponse,
+  next: () => void,
+  apiKey: string,
+): Promise<void> {
         if (!req.url) {
           next()
           return
@@ -119,44 +148,7 @@ export function openaiProxy(apiKey: string): Plugin {
               { role: 'system', content: kioskInstructions(lang) },
               ...(payload.messages ?? []),
             ],
-            tools: [
-              {
-                type: 'function',
-                function: {
-                  name: 'show_bills',
-                  description:
-                    'Show bills on the kiosk screen only after the resident asks. Use assessment for cukai taksiran, compound for saman or kompaun, all if they ask for every bill.',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      kind: {
-                        type: 'string',
-                        enum: ['assessment', 'compound', 'all'],
-                      },
-                    },
-                    required: ['kind'],
-                  },
-                },
-              },
-              {
-                type: 'function',
-                function: {
-                  name: 'start_payment',
-                  description:
-                    'Hand the resident to payment and stop talking. Use duitnow for DuitNow QR, card for credit/debit card, choose if they did not name a method.',
-                  parameters: {
-                    type: 'object',
-                    properties: {
-                      method: {
-                        type: 'string',
-                        enum: ['duitnow', 'card', 'choose'],
-                      },
-                    },
-                    required: ['method'],
-                  },
-                },
-              },
-            ],
+            tools: chatToolDefs(),
           })
           if (!result.ok) {
             json(res, result.status, result.data)
@@ -243,8 +235,5 @@ export function openaiProxy(apiKey: string): Plugin {
           return
         }
 
-        next()
-      })
-    },
-  }
+  next()
 }

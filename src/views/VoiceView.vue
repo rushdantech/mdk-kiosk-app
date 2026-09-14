@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import PaymentPanel from '../components/PaymentPanel.vue'
 import { money } from '../data/fixtures'
 import { billDate, billDetail, billTitle, useT } from '../i18n'
-import { selectedTotal, session, toggleBill } from '../store/session'
-import type { ChatLine } from '../types'
+import { finishPayment, selectedTotal, session, toggleBill } from '../store/session'
+import type { ChatLine, PayMethod } from '../types'
 import {
   createVoiceRuntime,
   lineText,
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
-import { inferPayChoice, type PayChoice } from '../voice/intent'
+import { inferConfirm, inferPayChoice, type PayChoice } from '../voice/intent'
+
+type PayStage = 'bills' | 'confirm' | 'duitnow' | 'card'
 
 const router = useRouter()
 const tx = useT()
@@ -19,31 +22,66 @@ const phase = ref<AgentPhase>('connecting')
 const interim = ref('')
 const liveFrom = ref<CaptionFrom>('bot')
 const muted = ref(false)
-const readyToPay = ref(false)
 const captions = ref<ChatLine[]>([])
 const error = ref('')
 const talkList = ref<HTMLOListElement | null>(null)
 const revealed = ref(false)
-const handedOff = ref(false)
+const payStage = ref<PayStage>('bills')
+const pendingMethod = ref<PayMethod | null>(null)
 
-function handoff(method: PayChoice): void {
-  if (handedOff.value) {
+const agentReady = ref(false)
+const booting = computed(() => !agentReady.value && !error.value)
+const paying = computed(() => payStage.value === 'duitnow' || payStage.value === 'card')
+
+function proposePay(method: PayChoice): void {
+  revealed.value = true
+  if (method === 'choose') {
+    if (!paying.value) {
+      payStage.value = 'bills'
+      pendingMethod.value = null
+    }
     return
   }
-  handedOff.value = true
+  if (payStage.value === method) {
+    return
+  }
+  pendingMethod.value = method
+  payStage.value = 'confirm'
+}
+
+function paymentConfirmReady(): boolean {
+  return payStage.value === 'confirm' && pendingMethod.value !== null && session.selected.size > 0
+}
+
+function confirmPay(): void {
+  if (!paymentConfirmReady() || !pendingMethod.value) {
+    return
+  }
+  payStage.value = pendingMethod.value
+}
+
+function cancelPay(): void {
+  pendingMethod.value = null
+  payStage.value = 'bills'
+}
+
+function completePay(method: PayMethod): void {
   runtime.stop()
-  if (method === 'duitnow' || method === 'card') {
-    void router.push({ name: 'pay', query: { method } })
-    return
-  }
-  void router.push({ name: 'pay' })
+  finishPayment(method)
+  void router.push('/done')
 }
 
 const runtime = createVoiceRuntime({
   onPhase(next) {
     phase.value = next
+    if (next === 'speaking' || next === 'listening') {
+      agentReady.value = true
+    }
   },
   onCaption(line, live, from) {
+    if (line?.from === 'bot') {
+      agentReady.value = true
+    }
     if (from) {
       liveFrom.value = from
     }
@@ -58,11 +96,21 @@ const runtime = createVoiceRuntime({
     revealed.value = true
   },
   onReadyToPay(method: PayChoice) {
-    readyToPay.value = true
-    revealed.value = true
-    handoff(method)
+    proposePay(method)
+  },
+  canConfirmPayment() {
+    return paymentConfirmReady()
+  },
+  onConfirmPayment() {
+    confirmPay()
+  },
+  onCancelPayment() {
+    if (payStage.value === 'confirm' || paying.value) {
+      cancelPay()
+    }
   },
   onError(message) {
+    agentReady.value = true
     error.value = message || tx.value('voiceError')
   },
 })
@@ -91,10 +139,6 @@ function toggleMute(): void {
   runtime.setMuted(muted.value)
 }
 
-function pay(method: PayChoice = 'choose'): void {
-  handoff(method)
-}
-
 function who(from: CaptionFrom): string {
   return from === 'user' ? tx.value('you') : tx.value('assistant')
 }
@@ -102,9 +146,23 @@ function who(from: CaptionFrom): string {
 watch([captions, interim], () => {
   const lastUser = [...captions.value].reverse().find((line) => line.from === 'user')
   const spoken = `${interim.value} ${lastUser ? lineText(lastUser) : ''}`
-  const payMethod = inferPayChoice(spoken)
-  if (payMethod === 'duitnow' || payMethod === 'card') {
-    handoff(payMethod)
+  if (payStage.value === 'confirm') {
+    const switchMethod = inferPayChoice(spoken)
+    if (switchMethod === 'duitnow' || switchMethod === 'card') {
+      proposePay(switchMethod)
+    } else {
+      const answer = inferConfirm(spoken)
+      if (answer === true) {
+        confirmPay()
+      } else if (answer === false) {
+        cancelPay()
+      }
+    }
+  } else {
+    const payMethod = inferPayChoice(spoken)
+    if (payMethod === 'duitnow' || payMethod === 'card') {
+      proposePay(payMethod)
+    }
   }
   void nextTick(() => {
     const list = talkList.value
@@ -124,6 +182,10 @@ const listTitle = computed(() => {
   return tx.value('voiceBillsTitle')
 })
 
+const confirmCopy = computed(() =>
+  pendingMethod.value === 'card' ? tx.value('confirmCard') : tx.value('confirmDuitnow'),
+)
+
 onMounted(() => {
   void runtime.start()
 })
@@ -134,7 +196,20 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section class="voice-desk" :class="{ 'talk-only': !revealed }">
+  <section v-if="booting" class="agent-boot" aria-live="polite" aria-busy="true">
+    <div class="orb-wrap connecting" aria-hidden="true">
+      <div class="orb-ring"></div>
+      <div class="orb-ring delay"></div>
+      <div class="orb">
+        <span class="orb-core"></span>
+      </div>
+    </div>
+    <h1>{{ tx('loadingAgent') }}</h1>
+    <p class="lead">{{ tx('loadingAgentLead') }}</p>
+    <p class="voice-status">{{ tx('loadingAgentStatus') }}</p>
+  </section>
+
+  <section v-else class="voice-desk" :class="{ 'talk-only': !revealed }">
     <aside class="voice-talk">
       <p class="live-tag">{{ tx('live') }}</p>
       <p class="voice-status">{{ status }}</p>
@@ -175,63 +250,106 @@ onUnmounted(() => {
     </aside>
 
     <div v-if="revealed" class="voice-bills">
-      <p class="ic">{{ tx('billsHello') }} {{ session.citizen?.shortName }}</p>
-      <h1>{{ listTitle }}</h1>
+      <template v-if="!paying">
+        <p class="ic">{{ tx('billsHello') }} {{ session.citizen?.shortName }}</p>
+        <h1>{{ listTitle }}</h1>
 
-      <div class="groups">
-        <p v-if="assessments.length" class="ic">{{ tx('assessment') }}</p>
-        <button
-          v-for="bill in assessments"
-          :key="bill.id"
-          type="button"
-          class="bill-card"
-          :class="{ on: session.selected.has(bill.id) }"
-          @click="toggleBill(bill.id)"
-        >
-          <span class="check">{{ session.selected.has(bill.id) ? '✓' : '' }}</span>
-          <span>
-            <strong>{{ billTitle(bill) }}</strong>
-            <p>{{ billDetail(bill) }}</p>
-            <span class="tag">{{ tx('account') }} {{ bill.accountNo }} · {{ billDate(bill) }}</span>
-          </span>
-          <span class="amount">RM {{ money(bill.amount) }}</span>
-        </button>
-
-        <p v-if="summons.length" class="ic">{{ tx('summons') }}</p>
-        <button
-          v-for="bill in summons"
-          :key="bill.id"
-          type="button"
-          class="bill-card"
-          :class="{ on: session.selected.has(bill.id) }"
-          @click="toggleBill(bill.id)"
-        >
-          <span class="check">{{ session.selected.has(bill.id) ? '✓' : '' }}</span>
-          <span>
-            <strong>{{ billTitle(bill) }}</strong>
-            <p>{{ billDetail(bill) }}</p>
-            <span class="tag">
-              {{ tx('notice') }} {{ bill.noticeNo }}
-              <template v-if="bill.plate"> · {{ tx('plate') }} {{ bill.plate }}</template>
+        <div class="groups">
+          <p v-if="assessments.length" class="ic">{{ tx('assessment') }}</p>
+          <button
+            v-for="bill in assessments"
+            :key="bill.id"
+            type="button"
+            class="bill-card"
+            :class="{ on: session.selected.has(bill.id) }"
+            @click="toggleBill(bill.id)"
+          >
+            <span class="check">{{ session.selected.has(bill.id) ? '✓' : '' }}</span>
+            <span>
+              <strong>{{ billTitle(bill) }}</strong>
+              <p>{{ billDetail(bill) }}</p>
+              <span class="tag">{{ tx('account') }} {{ bill.accountNo }} · {{ billDate(bill) }}</span>
             </span>
-          </span>
-          <span class="amount">
-            <span v-if="bill.originalAmount" class="was">RM {{ money(bill.originalAmount) }}</span>
-            RM {{ money(bill.amount) }}
-            <span v-if="bill.originalAmount" class="tag">{{ tx('special') }}</span>
-          </span>
-        </button>
-      </div>
+            <span class="amount">RM {{ money(bill.amount) }}</span>
+          </button>
 
-      <div class="checkout voice-pay">
-        <div>
-          <p>{{ tx('total') }}</p>
+          <p v-if="summons.length" class="ic">{{ tx('summons') }}</p>
+          <button
+            v-for="bill in summons"
+            :key="bill.id"
+            type="button"
+            class="bill-card"
+            :class="{ on: session.selected.has(bill.id) }"
+            @click="toggleBill(bill.id)"
+          >
+            <span class="check">{{ session.selected.has(bill.id) ? '✓' : '' }}</span>
+            <span>
+              <strong>{{ billTitle(bill) }}</strong>
+              <p>{{ billDetail(bill) }}</p>
+              <span class="tag">
+                {{ tx('notice') }} {{ bill.noticeNo }}
+                <template v-if="bill.plate"> · {{ tx('plate') }} {{ bill.plate }}</template>
+              </span>
+            </span>
+            <span class="amount">
+              <span v-if="bill.originalAmount" class="was">RM {{ money(bill.originalAmount) }}</span>
+              RM {{ money(bill.amount) }}
+              <span v-if="bill.originalAmount" class="tag">{{ tx('special') }}</span>
+            </span>
+          </button>
+        </div>
+
+        <div v-if="payStage === 'confirm'" class="confirm-pay">
+          <p class="ic">{{ tx('confirmPayTitle') }}</p>
+          <h2>{{ pendingMethod === 'card' ? tx('card') : tx('duitnow') }}</h2>
+          <p class="lead">{{ confirmCopy }}</p>
           <p class="amount">RM {{ money(selectedTotal) }}</p>
+          <div class="actions">
+            <button type="button" class="ghost" @click="cancelPay">{{ tx('confirmNo') }}</button>
+            <button
+              type="button"
+              class="solid"
+              :disabled="session.selected.size === 0"
+              @click="confirmPay"
+            >
+              {{ tx('confirmYes') }}
+            </button>
+          </div>
         </div>
-        <div class="voice-pay-methods">
-          <button type="button" class="pay" @click="pay('duitnow')">{{ tx('duitnow') }}</button>
-          <button type="button" class="pay" @click="pay('card')">{{ tx('card') }}</button>
+
+        <div v-else class="checkout voice-pay">
+          <div>
+            <p>{{ tx('total') }}</p>
+            <p class="amount">RM {{ money(selectedTotal) }}</p>
+          </div>
+          <div class="voice-pay-methods">
+            <button
+              type="button"
+              class="pay"
+              :disabled="session.selected.size === 0"
+              @click="proposePay('duitnow')"
+            >
+              {{ tx('duitnow') }}
+            </button>
+            <button
+              type="button"
+              class="pay"
+              :disabled="session.selected.size === 0"
+              @click="proposePay('card')"
+            >
+              {{ tx('card') }}
+            </button>
+          </div>
         </div>
+      </template>
+
+      <div v-else class="voice-pay-panel">
+        <p class="ic">{{ tx('confirmPayTitle') }}</p>
+        <PaymentPanel
+          :method="payStage === 'card' ? 'card' : 'duitnow'"
+          @back="cancelPay"
+          @complete="completePay"
+        />
       </div>
     </div>
   </section>

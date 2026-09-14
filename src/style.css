@@ -566,10 +566,47 @@ a.door {
 }
 
 .voice-talk {
+  position: sticky;
+  top: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+}
+
+.agent-boot {
+  min-height: 62vh;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.agent-boot h1 {
+  font-family: var(--display);
+  font-size: clamp(40px, 5vw, 64px);
+  line-height: 1;
+  margin: 8px 0 0;
+}
+
+.agent-boot .orb-wrap {
+  width: 220px;
+  height: 220px;
+}
+
+.confirm-pay {
+  margin-top: 22px;
+  padding: 22px 24px;
+  background: var(--card);
+  border: 3px solid var(--padi);
+  border-radius: 22px;
+}
+
+.confirm-pay h2 {
+  font-family: var(--display);
+  font-size: clamp(28px, 3vw, 40px);
+  margin: 4px 0 8px;
 }
 
 .voice-bills h1 {
@@ -755,6 +792,20 @@ a.door {
   gap: 12px;
 }
 
+.voice-pay-panel {
+  padding-top: 4px;
+}
+
+.voice-pay-panel .qr-wrap,
+.voice-pay-panel .slot-card {
+  margin-top: 12px;
+}
+
+.pay:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @keyframes breathe {
   0%,
   100% {
@@ -831,6 +882,28 @@ a.door {
   border: 6px solid #f3e27a;
   border-radius: 18px;
   box-shadow: 0 0 0 200vmax rgba(0, 0, 0, 0.35);
+}
+
+.scan-unknown {
+  margin-top: 12px;
+  color: var(--clay);
+  font-weight: 700;
+}
+
+.code-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.code-card {
+  padding: 22px;
+}
+
+.barcode {
+  width: 100%;
+  height: auto;
 }
 
 .done-box {
@@ -999,10 +1072,10 @@ a.door {
   .slot,
   .pay-grid,
   .scan-stage,
+  .code-grid,
   .kb,
   .qr-wrap,
-  .bill-head,
-  .voice-desk {
+  .bill-head {
     grid-template-columns: 1fr;
   }
 

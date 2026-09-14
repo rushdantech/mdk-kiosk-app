@@ -111,6 +111,23 @@ const copy = {
     en: 'Live conversation. Speak anytime. I am listening now.',
   },
   live: { ms: 'Langsung', en: 'Live' },
+  loadingAgent: { ms: 'Loading AI Agent', en: 'Loading AI Agent' },
+  loadingAgentLead: {
+    ms: 'Menyambung mikrofon dan pembantu suara. Sila tunggu sebentar.',
+    en: 'Connecting the microphone and voice assistant. Please wait a moment.',
+  },
+  loadingAgentStatus: { ms: 'Menyambung…', en: 'Connecting…' },
+  confirmPayTitle: { ms: 'Sahkan cara bayar', en: 'Confirm how to pay' },
+  confirmDuitnow: {
+    ms: 'Paparkan kod DuitNow QR sekarang? Ketik Sahkan atau cakap ya.',
+    en: 'Show the DuitNow QR now? Tap Confirm or say yes.',
+  },
+  confirmCard: {
+    ms: 'Teruskan ke terminal kad debit / kredit? Ketik Sahkan atau cakap ya.',
+    en: 'Continue to the debit / credit card terminal? Tap Confirm or say yes.',
+  },
+  confirmYes: { ms: 'Sahkan', en: 'Confirm' },
+  confirmNo: { ms: 'Kembali', en: 'Back' },
   connecting: { ms: 'Menyambung…', en: 'Connecting…' },
   speaking: { ms: 'Pembantu sedang cakap', en: 'Assistant is speaking' },
   thinking: { ms: 'Sebentar…', en: 'One moment…' },
@@ -141,6 +158,28 @@ const copy = {
     en: 'Hold about a handspan away. Keep still.',
   },
   scanDemo: { ms: 'Simulasi: imbas notis contoh', en: 'Demo: scan sample notice' },
+  scanListening: {
+    ms: 'Kamera terbuka. Imbas kod bar pada kertas.',
+    en: 'Camera is on. Scan the barcode on the paper.',
+  },
+  scanNeedCamera: {
+    ms: 'Benarkan kamera, kemudian imbas kod bar sebenar.',
+    en: 'Allow the camera, then scan a real barcode.',
+  },
+  scanUnknown: {
+    ms: 'Kod ini tiada dalam rekod MDK',
+    en: 'This code is not in the MDK record',
+  },
+  scanCodesHint: {
+    ms: 'Untuk ujian, buka senarai kod contoh pada peranti lain.',
+    en: 'For testing, open the sample codes on another device.',
+  },
+  scanCodesOpen: { ms: 'Buka kod contoh', en: 'Open sample codes' },
+  scanCodesTitle: { ms: 'Kod bar contoh', en: 'Sample barcodes' },
+  scanCodesLead: {
+    ms: 'Cetak atau paparkan pada telefon lain, kemudian imbas di kiosk. Kod lain tidak diterima.',
+    en: 'Print these or show them on another phone, then scan at the kiosk. Other codes are rejected.',
+  },
   foundPaper: { ms: 'Kertas dikesan', en: 'Paper detected' },
   keyinTitle: { ms: 'Taip butiran', en: 'Key in details' },
   keyinLead: {
