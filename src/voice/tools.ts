@@ -1,18 +1,33 @@
-export const OFFER_PAYMENT_DESC =
-  'The resident named a pay method. Use duitnow or card to ask for confirmation only — never show the QR or card terminal yet. Use choose if they want to pay but have not named a method.'
+export const SHOW_BILLS_DESC =
+  'Show bills on the kiosk screen only after the resident asks. Use assessment for cukai taksiran, compound for saman or kompaun, all if they ask for every bill. Stay in the conversation.'
+
+export const START_PAYMENT_DESC =
+  'Propose a payment method on the right side of the screen and keep talking. Use duitnow or card only to ask for confirmation — never jump straight to the QR or card terminal. Use choose if they want to pay but have not named a method.'
 
 export const CONFIRM_PAYMENT_DESC =
-  'The resident clearly confirmed payment. Show the DuitNow QR or card terminal. Call only after they say yes.'
+  'The resident confirmed. Show the DuitNow QR or card terminal on the right. Stay on the call and keep talking.'
 
-export const CANCEL_ACTION_DESC =
-  'The resident cancelled or said no. Clear any pending payment step and stay in conversation.'
+export const CANCEL_PAYMENT_DESC =
+  'The resident cancelled the payment method. Return to the bill list and keep talking.'
 
 export function realtimeToolDefs() {
   return [
     {
       type: 'function',
-      name: 'offer_payment',
-      description: OFFER_PAYMENT_DESC,
+      name: 'show_bills',
+      description: SHOW_BILLS_DESC,
+      parameters: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', enum: ['assessment', 'compound', 'all'] },
+        },
+        required: ['kind'],
+      },
+    },
+    {
+      type: 'function',
+      name: 'start_payment',
+      description: START_PAYMENT_DESC,
       parameters: {
         type: 'object',
         properties: {
@@ -29,8 +44,8 @@ export function realtimeToolDefs() {
     },
     {
       type: 'function',
-      name: 'cancel_action',
-      description: CANCEL_ACTION_DESC,
+      name: 'cancel_payment',
+      description: CANCEL_PAYMENT_DESC,
       parameters: { type: 'object', properties: {} },
     },
   ]

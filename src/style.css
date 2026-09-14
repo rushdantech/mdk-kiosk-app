@@ -616,59 +616,42 @@ a.door {
   margin: 4px 0 18px;
 }
 
-.voice-id-doors {
-  margin-top: 24px;
-}
-
-.voice-id-panel {
-  margin-top: 24px;
-}
-
-.agent-boot-inline {
-  text-align: center;
-}
-
-.agent-boot-inline h2 {
+.voice-pick h1 {
   font-family: var(--display);
-  font-size: clamp(28px, 3vw, 40px);
-  margin: 12px 0 8px;
+  font-size: clamp(32px, 3.4vw, 44px);
+  line-height: 1.05;
+  margin: 0 0 10px;
 }
 
-.agent-boot-inline .orb-wrap {
-  width: 180px;
-  height: 180px;
-  margin: 0 auto;
+.voice-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
 }
 
-.field-display {
-  width: 100%;
-  min-height: 72px;
-  margin: 12px 0;
-  padding: 0 18px;
-  font-size: clamp(28px, 3vw, 36px);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.06em;
-  border: 3px solid var(--ink);
-  border-radius: 16px;
-  background: var(--card);
-}
-
-.voice-confirm {
-  width: 100%;
-  margin-top: 16px;
+.door.mini {
+  min-height: 180px;
+  padding: 22px;
   text-align: left;
+  align-items: flex-start;
 }
 
-.voice-mykad {
-  width: 100%;
-  margin-top: 18px;
-  text-align: left;
+.door.mini.wide {
+  grid-column: 1 / -1;
 }
 
-.voice-mykad h2 {
+.door.mini strong {
+  display: block;
   font-family: var(--display);
-  font-size: clamp(26px, 2.8vw, 34px);
-  margin: 0 0 8px;
+  font-size: clamp(24px, 2.4vw, 32px);
+  margin-bottom: 6px;
+}
+
+.door.mini p {
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.35;
 }
 
 .live-tag {

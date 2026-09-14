@@ -17,7 +17,7 @@ export function inferBillScope(text: string): BillScope | null {
   const summons =
     /saman|kompaun|summons|summon|compound|\bplat\b|\bplate\b|parking|notis trafik/.test(spoken)
   const everything =
-    /semua|ada bil|bil apa|bil saya|tengok bil|lihat bil|semak bil|check bill|check my bill|yang tertunggak|what i owe|what do i owe|all bills|senarai|rekod|outstanding/.test(
+    /semua|ada bil|bil apa|bil saya|tengok bil|lihat bil|semak bil|check bill|check my bill|yang tertunggak|what i owe|what do i owe|all bills|senarai|rekod|outstanding|tunjuk|papar|show bill|show list|list bill/.test(
       spoken,
     )
 
@@ -43,7 +43,7 @@ export function inferPayChoice(text: string): PayChoice | null {
     return 'duitnow'
   }
   if (
-    /kad kredit|kad debit|credit card|debit card|\bcredit\b|\bdebit\b|terminal|\btap\b|\bcard\b|\bkredit\b/.test(
+    /kad kredit|kad debit|credit card|debit card|\bcredit\b|\bdebit\b|terminal|\btap\b|\bcard\b|\bkredit\b|\bkad\b/.test(
       spoken,
     )
   ) {
@@ -60,15 +60,18 @@ export function inferConfirm(text: string): boolean | null {
   if (!spoken) {
     return null
   }
+  const short = spoken.split(' ').length <= 4
   if (
-    /batal|cancel|kembali|\bback\b|jangan papar|tak mahu|tak nak|tak sah|\bno\b|\btidak\b|\bjangan\b|\bnanti\b/.test(
-      spoken,
-    )
+    /batal|cancel|kembali|\bback\b|jangan papar|tak mahu|tak nak|tak sah|\bno\b/.test(spoken)
   ) {
     return false
   }
+  if (short && /\btidak\b|\bjangan\b|\bnanti\b/.test(spoken)) {
+    return false
+  }
   if (
-    /\bya\b|\byes\b|\bok\b|\bokay\b|\bsah\b|sahkan|confirm|setuju|teruskan|betul|agree|paparkan|\bboleh\b|hm boleh/.test(
+    short &&
+    /\bya\b|\byes\b|\bok\b|\bokay\b|\bsah\b|sahkan|confirm|setuju|teruskan|betul|agree|paparkan/.test(
       spoken,
     )
   ) {

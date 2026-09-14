@@ -19,8 +19,8 @@ const copy = {
   },
   doorVoiceTitle: { ms: 'Cakap dengan pembantu', en: 'Talk to the assistant' },
   doorVoiceBody: {
-    ms: 'Sahkan MyKad dulu, kemudian bercakap dengan pembantu sambil lihat bil di skrin.',
-    en: 'Verify MyKad first, then talk to the assistant while your bills appear on screen.',
+    ms: 'Perbualan langsung. Cakap terus — pembantu dengar dan jawab.',
+    en: 'A live conversation. Just speak — the assistant hears and answers.',
   },
   doorScanTitle: { ms: 'Imbas borang', en: 'Scan a form' },
   doorScanBody: {
@@ -110,31 +110,6 @@ const copy = {
     ms: 'Perbualan langsung. Cakap bila-bila. Saya dengar sekarang.',
     en: 'Live conversation. Speak anytime. I am listening now.',
   },
-  voiceIdentifyTitle: { ms: 'Sahkan identiti', en: 'Verify identity' },
-  voiceIdentifyLead: {
-    ms: 'Masukkan MyKad atau taip nombor MyKad sebelum bercakap dengan pembantu.',
-    en: 'Insert your MyKad or key in your MyKad number before talking to the assistant.',
-  },
-  voiceInsertMykad: { ms: 'Masukkan MyKad', en: 'Insert MyKad' },
-  voiceInsertMykadBody: {
-    ms: 'Letakkan kad ke dalam pembaca di bawah skrin.',
-    en: 'Place the card in the reader below the screen.',
-  },
-  voiceKeyInIc: { ms: 'Taip no. MyKad', en: 'Key in MyKad no.' },
-  voiceKeyInIcBody: {
-    ms: 'Taip 12 digit nombor kad pengenalan.',
-    en: 'Enter the 12-digit identity card number.',
-  },
-  voiceIcPlaceholder: { ms: '650514086361', en: '650514086361' },
-  voiceIcVerify: { ms: 'Sahkan', en: 'Verify' },
-  voiceIcError: {
-    ms: 'Nombor MyKad tidak ditemui. Cuba lagi.',
-    en: 'MyKad number not found. Try again.',
-  },
-  voiceSessionHint: {
-    ms: 'Pilih bil di skrin, atau cakap jika perlukan bantuan bayar.',
-    en: 'Select bills on the screen, or speak if you need help paying.',
-  },
   live: { ms: 'Langsung', en: 'Live' },
   loadingAgent: { ms: 'Loading AI Agent', en: 'Loading AI Agent' },
   loadingAgentLead: {
@@ -169,31 +144,23 @@ const copy = {
     en: 'The assistant could not connect. Try again, or key in the bill.',
   },
   showList: { ms: 'Tunjuk senarai bil', en: 'Show bill list' },
-  voiceMykadTitle: { ms: 'Masukkan MyKad', en: 'Insert MyKad' },
-  voiceMykadLead: {
-    ms: 'Sila masukkan MyKad ke pembaca di bawah untuk cari rekod.',
-    en: 'Please insert your MyKad into the reader below to look up records.',
+  voicePickTitle: { ms: 'Pilih rekod', en: 'Choose a record' },
+  voicePickLead: {
+    ms: 'Cakap dengan pembantu, atau ketik di bawah.',
+    en: 'Talk to the assistant, or tap below.',
   },
-  voiceMykadStatus: {
-    ms: 'Menunggu MyKad…',
-    en: 'Waiting for MyKad…',
+  voicePickAssessment: {
+    ms: 'Cukai harta / taksiran',
+    en: 'Property assessment tax',
   },
-  voiceQueryBoth: {
-    ms: 'Mencari cukai dan saman',
-    en: 'Looking up assessment and summons',
+  voicePickSummons: {
+    ms: 'Saman trafik & bukan trafik',
+    en: 'Traffic & other summons',
   },
-  confirmRecordsTitle: { ms: 'Sahkan semakan', en: 'Confirm lookup' },
-  confirmRecordsAssessment: {
-    ms: 'Semak cukai taksiran dengan MyKad? Ketik Sahkan atau cakap ya.',
-    en: 'Check assessment tax with MyKad? Tap Confirm or say yes.',
-  },
-  confirmRecordsSummons: {
-    ms: 'Semak saman dengan MyKad? Ketik Sahkan atau cakap ya.',
-    en: 'Check summons with MyKad? Tap Confirm or say yes.',
-  },
-  confirmRecordsAll: {
-    ms: 'Semak semua bil dengan MyKad? Ketik Sahkan atau cakap ya.',
-    en: 'Check all bills with MyKad? Tap Confirm or say yes.',
+  voicePickAll: { ms: 'Semua bil', en: 'All bills' },
+  voicePickAllBody: {
+    ms: 'Taksiran dan semua saman',
+    en: 'Assessment and every summons',
   },
   you: { ms: 'Anda', en: 'You' },
   assistant: { ms: 'Pembantu', en: 'Assistant' },
