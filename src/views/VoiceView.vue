@@ -19,7 +19,7 @@ import {
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
-import { inferBillScope, inferConfirm, inferPayChoice, type PayChoice } from '../voice/intent'
+import type { PayChoice } from '../voice/intent'
 
 type PayStage = 'bills' | 'confirm' | 'duitnow' | 'card'
 
@@ -36,11 +36,24 @@ const payStage = ref<PayStage>('bills')
 const pendingMethod = ref<PayMethod | null>(null)
 
 const agentReady = ref(false)
+const billsVisible = ref(false)
+const userHasSpoken = ref(false)
 const booting = computed(() => !agentReady.value && !error.value)
 const paying = computed(() => payStage.value === 'duitnow' || payStage.value === 'card')
 
+function prepareVoiceSession(): void {
+  session.citizen = null
+  session.bills = []
+  session.selected = new Set()
+  billsVisible.value = false
+  userHasSpoken.value = false
+  payStage.value = 'bills'
+  pendingMethod.value = null
+}
+
 function showBills(scope: BillScope = 'all'): void {
   revealCitizenBills('voice', scope)
+  billsVisible.value = true
 }
 
 function proposePay(method: PayChoice): void {
@@ -107,6 +120,12 @@ const runtime = createVoiceRuntime({
       captions.value = [...captions.value, line].slice(-8)
     }
   },
+  onUserSpoke() {
+    userHasSpoken.value = true
+  },
+  canShowBills() {
+    return userHasSpoken.value
+  },
   onShowBills(scope: BillScope) {
     showBills(scope)
   },
@@ -146,7 +165,7 @@ const status = computed(() => {
   return tx.value('listeningLive')
 })
 
-const hasBills = computed(() => session.bills.length > 0)
+const hasBills = computed(() => billsVisible.value)
 const assessments = computed(() => session.bills.filter((bill) => bill.kind === 'assessment'))
 const summons = computed(() => session.bills.filter((bill) => bill.kind === 'compound'))
 
@@ -160,36 +179,6 @@ function who(from: CaptionFrom): string {
 }
 
 watch([captions, interim], () => {
-  const lastUser = [...captions.value].reverse().find((line) => line.from === 'user')
-  const spoken = `${interim.value} ${lastUser ? lineText(lastUser) : ''}`
-  if (payStage.value === 'confirm') {
-    const switchMethod = inferPayChoice(spoken)
-    if (switchMethod === 'duitnow' || switchMethod === 'card') {
-      proposePay(switchMethod)
-    } else {
-      const answer = inferConfirm(spoken)
-      if (answer === true) {
-        confirmPay()
-      } else if (answer === false) {
-        cancelPay()
-      }
-    }
-  } else {
-    const scope = inferBillScope(spoken)
-    if (scope) {
-      showBills(scope)
-    }
-    const payMethod = inferPayChoice(spoken)
-    if (payMethod === 'duitnow' || payMethod === 'card') {
-      proposePay(payMethod)
-    } else if (payMethod === 'choose') {
-      if (!scope) {
-        showBills('all')
-      }
-      payStage.value = 'bills'
-      pendingMethod.value = null
-    }
-  }
   void nextTick(() => {
     const list = talkList.value
     if (list) {
@@ -213,6 +202,7 @@ const confirmCopy = computed(() =>
 )
 
 onMounted(() => {
+  prepareVoiceSession()
   void runtime.start()
 })
 

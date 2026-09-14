@@ -1,4 +1,4 @@
-import { revealCitizenBills, type BillScope } from '../store/session'
+import { type BillScope } from '../store/session'
 import { session } from '../store/session'
 import type { ChatLine } from '../types'
 import { inferBillScope, inferConfirm, inferPayChoice, type PayChoice } from './intent'
@@ -70,13 +70,15 @@ function applyTool(
   method: PayChoice = 'choose',
 ): void {
   if (name === 'show_bills') {
-    revealCitizenBills('voice', scope)
+    if (!hooks.canShowBills()) {
+      return
+    }
     hooks.onShowBills(scope)
     return
   }
   if (name === 'start_payment' || name === 'choose_payment') {
-    if (!session.bills.length) {
-      revealCitizenBills('voice', scope)
+    if (!session.bills.length && hooks.canShowBills()) {
+      hooks.onShowBills(scope)
     }
     hooks.onReadyToPay(method)
     return
@@ -171,6 +173,8 @@ export type CaptionFrom = 'bot' | 'user'
 type VoiceHooks = {
   onPhase: (phase: AgentPhase) => void
   onCaption: (line: ChatLine | null, interim?: string, from?: CaptionFrom) => void
+  onUserSpoke: () => void
+  canShowBills: () => boolean
   onReadyToPay: (method: PayChoice) => void
   canConfirmPayment: () => boolean
   onConfirmPayment: () => void
@@ -248,6 +252,7 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     if (!spoken.trim()) {
       return
     }
+    hooks.onUserSpoke()
     const confirm = inferConfirm(spoken)
     if (confirm === false) {
       hooks.onCancelPayment()
@@ -373,8 +378,8 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
           response: {
             instructions:
               session.lang === 'ms'
-                ? 'Sapa pengguna dengan ringkas dan tanya apa yang mereka mahu semak atau bayar.'
-                : 'Greet the resident briefly and ask what they want to check or pay.',
+                ? 'Sapa pengguna dengan ringkas. Tanya apa yang mereka mahu semak. Jangan panggil show_bills atau sebut senarai bil.'
+                : 'Greet the resident briefly and ask what they want to check. Do not call show_bills or mention a bill list yet.',
           },
         }),
       )
