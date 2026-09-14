@@ -19,7 +19,7 @@ import {
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
-import { inferConfirm, type PayChoice } from '../voice/intent'
+import { inferBillScope, inferConfirm, type PayChoice } from '../voice/intent'
 
 type PayStage = 'bills' | 'confirm' | 'duitnow' | 'card'
 type DeskPhase = 'talk' | 'mykad' | 'query' | 'ready'
@@ -36,6 +36,7 @@ const talkList = ref<HTMLOListElement | null>(null)
 const deskPhase = ref<DeskPhase>('talk')
 const pendingScope = ref<BillScope>('all')
 const pendingRecords = ref<BillScope | null>(null)
+const lastOfferedScope = ref<BillScope | null>(null)
 const queryStep = ref(0)
 const payStage = ref<PayStage>('bills')
 const pendingMethod = ref<PayMethod | null>(null)
@@ -68,26 +69,33 @@ function offerRecords(scope: BillScope = 'all'): void {
     showBills(scope)
     return
   }
+  lastOfferedScope.value = scope
   pendingRecords.value = scope
   pendingScope.value = scope
 }
 
 function recordsConfirmReady(): boolean {
-  return pendingRecords.value !== null && deskPhase.value === 'talk'
+  return (
+    deskPhase.value === 'talk' &&
+    (pendingRecords.value !== null || lastOfferedScope.value !== null)
+  )
 }
 
 function confirmRecords(): void {
-  if (!recordsConfirmReady()) {
+  if (deskPhase.value !== 'talk') {
     return
   }
-  pendingScope.value = pendingRecords.value ?? 'all'
+  const scope = pendingRecords.value ?? lastOfferedScope.value ?? pendingScope.value ?? 'all'
+  pendingScope.value = scope
   pendingRecords.value = null
+  lastOfferedScope.value = null
   deskPhase.value = 'mykad'
   window.clearTimeout(mykadAuto)
 }
 
 function cancelPending(): void {
   pendingRecords.value = null
+  lastOfferedScope.value = null
   if (payStage.value === 'confirm' || paying.value) {
     cancelPay()
   }
@@ -251,7 +259,17 @@ watch(captions, () => {
   if (!lastUser) {
     return
   }
-  const answer = inferConfirm(lineText(lastUser))
+  const spoken = lineText(lastUser)
+
+  if (deskPhase.value === 'talk') {
+    const scope = inferBillScope(spoken)
+    if (scope) {
+      lastOfferedScope.value = scope
+      pendingScope.value = scope
+    }
+  }
+
+  const answer = inferConfirm(spoken)
   if (answer === false) {
     cancelPending()
     return

@@ -74,9 +74,7 @@ function applyTool(
     return
   }
   if (name === 'confirm_records') {
-    if (hooks.canConfirmRecords()) {
-      hooks.onConfirmRecords()
-    }
+    hooks.onConfirmRecords()
     return
   }
   if (name === 'offer_payment' || name === 'start_payment' || name === 'choose_payment') {

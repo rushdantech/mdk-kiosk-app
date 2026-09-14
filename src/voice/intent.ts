@@ -68,7 +68,7 @@ export function inferConfirm(text: string): boolean | null {
     return false
   }
   if (
-    /\bya\b|\byes\b|\bok\b|\bokay\b|\bsah\b|sahkan|confirm|setuju|teruskan|betul|agree|paparkan|\bboleh\b/.test(
+    /\bya\b|\byes\b|\bok\b|\bokay\b|\bsah\b|sahkan|confirm|setuju|teruskan|betul|agree|paparkan|\bboleh\b|hm boleh/.test(
       spoken,
     )
   ) {
