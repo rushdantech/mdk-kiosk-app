@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import OnScreenKeyboard from '../components/OnScreenKeyboard.vue'
 import PaymentPanel from '../components/PaymentPanel.vue'
-import { money } from '../data/fixtures'
+import { money, normalizeKey } from '../data/fixtures'
 import { billDate, billDetail, billTitle, useT } from '../i18n'
 import {
   finishPayment,
-  revealCitizenBills,
+  loadCitizenBills,
   selectedTotal,
   session,
   toggleBill,
-  type BillScope,
 } from '../store/session'
 import type { ChatLine, PayMethod } from '../types'
 import {
@@ -19,13 +19,21 @@ import {
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
-import { inferBillScope, inferConfirm, type PayChoice } from '../voice/intent'
+import { inferConfirm, type PayChoice } from '../voice/intent'
 
+type VoicePhase = 'identify' | 'loading' | 'session'
+type IdentifyMode = 'choose' | 'insert' | 'keyin'
 type PayStage = 'bills' | 'confirm' | 'duitnow' | 'card'
-type DeskPhase = 'talk' | 'mykad' | 'query' | 'ready'
+
+const DEMO_IC = '650514086361'
 
 const router = useRouter()
 const tx = useT()
+const voicePhase = ref<VoicePhase>('identify')
+const identifyMode = ref<IdentifyMode>('choose')
+const icInput = ref('')
+const icError = ref(false)
+const queryStep = ref(0)
 const phase = ref<AgentPhase>('connecting')
 const interim = ref('')
 const liveFrom = ref<CaptionFrom>('bot')
@@ -33,141 +41,26 @@ const muted = ref(false)
 const captions = ref<ChatLine[]>([])
 const error = ref('')
 const talkList = ref<HTMLOListElement | null>(null)
-const deskPhase = ref<DeskPhase>('talk')
-const pendingScope = ref<BillScope>('all')
-const pendingRecords = ref<BillScope | null>(null)
-const lastOfferedScope = ref<BillScope | null>(null)
-const queryStep = ref(0)
 const payStage = ref<PayStage>('bills')
 const pendingMethod = ref<PayMethod | null>(null)
-
 const agentReady = ref(false)
-const booting = computed(() => !agentReady.value && !error.value)
-const paying = computed(() => payStage.value === 'duitnow' || payStage.value === 'card')
-const splitView = computed(() => deskPhase.value === 'ready')
+const agentStarted = ref(false)
 
-let mykadAuto = 0
+const paying = computed(() => payStage.value === 'duitnow' || payStage.value === 'card')
+const agentBooting = computed(
+  () => voicePhase.value === 'session' && !agentReady.value && !error.value,
+)
+
 let queryTick = 0
 let queryDone = 0
+let kadAuto = 0
 
 const querySteps = computed(() => [
   tx.value('kadQueryChip'),
   tx.value('kadQueryIc'),
-  pendingScope.value === 'assessment'
-    ? tx.value('kadQueryTax')
-    : pendingScope.value === 'compound'
-      ? tx.value('kadQuerySummons')
-      : tx.value('voiceQueryBoth'),
+  tx.value('kadQueryTax'),
+  tx.value('kadQuerySummons'),
 ])
-
-function showBills(scope: BillScope = 'all'): void {
-  revealCitizenBills('voice', scope)
-}
-
-function offerRecords(scope: BillScope = 'all'): void {
-  if (deskPhase.value === 'ready') {
-    showBills(scope)
-    return
-  }
-  lastOfferedScope.value = scope
-  pendingRecords.value = scope
-  pendingScope.value = scope
-}
-
-function recordsConfirmReady(): boolean {
-  return (
-    deskPhase.value === 'talk' &&
-    (pendingRecords.value !== null || lastOfferedScope.value !== null)
-  )
-}
-
-function confirmRecords(): void {
-  if (deskPhase.value !== 'talk') {
-    return
-  }
-  const scope = pendingRecords.value ?? lastOfferedScope.value ?? pendingScope.value ?? 'all'
-  pendingScope.value = scope
-  pendingRecords.value = null
-  lastOfferedScope.value = null
-  deskPhase.value = 'mykad'
-  window.clearTimeout(mykadAuto)
-}
-
-function cancelPending(): void {
-  pendingRecords.value = null
-  lastOfferedScope.value = null
-  if (payStage.value === 'confirm' || paying.value) {
-    cancelPay()
-  }
-}
-
-function startMykadQuery(): void {
-  if (deskPhase.value !== 'mykad') {
-    return
-  }
-  window.clearTimeout(mykadAuto)
-  deskPhase.value = 'query'
-  queryStep.value = 0
-  queryTick = window.setInterval(() => {
-    queryStep.value = (queryStep.value + 1) % querySteps.value.length
-  }, 700)
-  queryDone = window.setTimeout(() => {
-    window.clearInterval(queryTick)
-    showBills(pendingScope.value)
-    deskPhase.value = 'ready'
-  }, 4200)
-}
-
-function clearMykadTimers(): void {
-  window.clearTimeout(mykadAuto)
-  window.clearInterval(queryTick)
-  window.clearTimeout(queryDone)
-}
-
-function offerPayment(method: PayChoice): void {
-  if (deskPhase.value !== 'ready') {
-    return
-  }
-  if (method === 'choose') {
-    if (!paying.value) {
-      payStage.value = 'bills'
-      pendingMethod.value = null
-    }
-    return
-  }
-  if (payStage.value === method) {
-    return
-  }
-  pendingMethod.value = method
-  payStage.value = 'confirm'
-}
-
-function paymentConfirmReady(): boolean {
-  return (
-    deskPhase.value === 'ready' &&
-    payStage.value === 'confirm' &&
-    pendingMethod.value !== null &&
-    session.selected.size > 0
-  )
-}
-
-function confirmPay(): void {
-  if (!paymentConfirmReady() || !pendingMethod.value) {
-    return
-  }
-  payStage.value = pendingMethod.value
-}
-
-function cancelPay(): void {
-  pendingMethod.value = null
-  payStage.value = 'bills'
-}
-
-function completePay(method: PayMethod): void {
-  runtime.stop()
-  finishPayment(method)
-  void router.push('/done')
-}
 
 const runtime = createVoiceRuntime({
   onPhase(next) {
@@ -190,17 +83,17 @@ const runtime = createVoiceRuntime({
       captions.value = [...captions.value, line].slice(-8)
     }
   },
-  onOfferRecords(scope: BillScope) {
-    offerRecords(scope)
+  onOfferRecords() {
+    /* identity handled before the agent starts */
   },
   canConfirmRecords() {
-    return recordsConfirmReady()
+    return false
   },
   onConfirmRecords() {
-    confirmRecords()
+    /* identity handled before the agent starts */
   },
   isRecordsReady() {
-    return deskPhase.value === 'ready'
+    return voicePhase.value === 'session'
   },
   onOfferPayment(method: PayChoice) {
     offerPayment(method)
@@ -220,15 +113,143 @@ const runtime = createVoiceRuntime({
   },
 })
 
+function clearTimers(): void {
+  window.clearInterval(queryTick)
+  window.clearTimeout(queryDone)
+  window.clearTimeout(kadAuto)
+}
+
+function beginLoading(): void {
+  icError.value = false
+  voicePhase.value = 'loading'
+  queryStep.value = 0
+  queryTick = window.setInterval(() => {
+    queryStep.value = (queryStep.value + 1) % querySteps.value.length
+  }, 700)
+  queryDone = window.setTimeout(() => {
+    window.clearInterval(queryTick)
+    startSession()
+  }, 4200)
+}
+
+function startSession(): void {
+  loadCitizenBills('voice', 'all')
+  voicePhase.value = 'session'
+  agentReady.value = false
+  if (!agentStarted.value) {
+    agentStarted.value = true
+    void runtime.start()
+  }
+}
+
+function openInsert(): void {
+  identifyMode.value = 'insert'
+  window.clearTimeout(kadAuto)
+  kadAuto = window.setTimeout(beginLoading, 3200)
+}
+
+function openKeyIn(): void {
+  identifyMode.value = 'keyin'
+  icInput.value = ''
+  icError.value = false
+}
+
+function backToChoose(): void {
+  window.clearTimeout(kadAuto)
+  identifyMode.value = 'choose'
+  icInput.value = ''
+  icError.value = false
+}
+
+function simulateKad(): void {
+  window.clearTimeout(kadAuto)
+  beginLoading()
+}
+
+function typeIc(value: string): void {
+  if (!/^\d$/.test(value)) {
+    return
+  }
+  icError.value = false
+  if (icInput.value.length >= 12) {
+    return
+  }
+  icInput.value += value
+}
+
+function backspaceIc(): void {
+  icError.value = false
+  icInput.value = icInput.value.slice(0, -1)
+}
+
+function clearIc(): void {
+  icError.value = false
+  icInput.value = ''
+}
+
+function verifyIc(): void {
+  const key = normalizeKey(icInput.value)
+  if (key === DEMO_IC) {
+    beginLoading()
+    return
+  }
+  icError.value = true
+}
+
+function offerPayment(method: PayChoice): void {
+  if (voicePhase.value !== 'session') {
+    return
+  }
+  if (method === 'choose') {
+    if (!paying.value) {
+      payStage.value = 'bills'
+      pendingMethod.value = null
+    }
+    return
+  }
+  if (payStage.value === method) {
+    return
+  }
+  pendingMethod.value = method
+  payStage.value = 'confirm'
+}
+
+function paymentConfirmReady(): boolean {
+  return (
+    voicePhase.value === 'session' &&
+    payStage.value === 'confirm' &&
+    pendingMethod.value !== null &&
+    session.selected.size > 0
+  )
+}
+
+function confirmPay(): void {
+  if (!paymentConfirmReady() || !pendingMethod.value) {
+    return
+  }
+  payStage.value = pendingMethod.value
+}
+
+function cancelPay(): void {
+  pendingMethod.value = null
+  payStage.value = 'bills'
+}
+
+function cancelPending(): void {
+  if (payStage.value === 'confirm' || paying.value) {
+    cancelPay()
+  }
+}
+
+function completePay(method: PayMethod): void {
+  runtime.stop()
+  finishPayment(method)
+  void router.push('/done')
+}
+
 const status = computed(() => {
   if (muted.value) {
     return tx.value('muted')
-  }
-  if (deskPhase.value === 'mykad') {
-    return tx.value('voiceMykadStatus')
-  }
-  if (deskPhase.value === 'query') {
-    return tx.value('kadQuery')
   }
   if (phase.value === 'connecting') {
     return tx.value('connecting')
@@ -255,33 +276,21 @@ function who(from: CaptionFrom): string {
 }
 
 watch(captions, () => {
+  if (voicePhase.value !== 'session') {
+    return
+  }
   const lastUser = [...captions.value].reverse().find((line) => line.from === 'user')
   if (!lastUser) {
     return
   }
-  const spoken = lineText(lastUser)
-
-  if (deskPhase.value === 'talk') {
-    const scope = inferBillScope(spoken)
-    if (scope) {
-      lastOfferedScope.value = scope
-      pendingScope.value = scope
-    }
-  }
-
-  const answer = inferConfirm(spoken)
+  const answer = inferConfirm(lineText(lastUser))
   if (answer === false) {
     cancelPending()
     return
   }
-  if (answer === true) {
-    if (recordsConfirmReady()) {
-      confirmRecords()
-    } else if (paymentConfirmReady()) {
-      confirmPay()
-    }
+  if (answer === true && paymentConfirmReady()) {
+    confirmPay()
   }
-
   void nextTick(() => {
     const list = talkList.value
     if (list) {
@@ -299,56 +308,100 @@ watch(interim, () => {
   })
 })
 
-const listTitle = computed(() => {
-  if (assessments.value.length && !summons.value.length) {
-    return tx.value('assessment')
-  }
-  if (summons.value.length && !assessments.value.length) {
-    return tx.value('summons')
-  }
-  return tx.value('voiceBillsTitle')
-})
-
 const confirmCopy = computed(() =>
   pendingMethod.value === 'card' ? tx.value('confirmCard') : tx.value('confirmDuitnow'),
 )
 
-const recordsConfirmCopy = computed(() => {
-  if (pendingRecords.value === 'assessment') {
-    return tx.value('confirmRecordsAssessment')
-  }
-  if (pendingRecords.value === 'compound') {
-    return tx.value('confirmRecordsSummons')
-  }
-  return tx.value('confirmRecordsAll')
-})
-
-onMounted(() => {
-  void runtime.start()
-})
-
 onUnmounted(() => {
   runtime.stop()
-  clearMykadTimers()
+  clearTimers()
 })
 </script>
 
 <template>
-  <section v-if="booting" class="agent-boot" aria-live="polite" aria-busy="true">
-    <div class="orb-wrap connecting" aria-hidden="true">
-      <div class="orb-ring"></div>
-      <div class="orb-ring delay"></div>
-      <div class="orb">
-        <span class="orb-core"></span>
+  <section v-if="voicePhase === 'identify'" class="panel">
+    <h1>{{ tx('voiceIdentifyTitle') }}</h1>
+    <p class="lead">{{ tx('voiceIdentifyLead') }}</p>
+
+    <div v-if="identifyMode === 'choose'" class="doors voice-id-doors">
+      <button type="button" class="door" @click="openInsert">
+        <div class="door-art" style="background: linear-gradient(145deg, #1f4d34, #79c59a)"></div>
+        <h2>{{ tx('voiceInsertMykad') }}</h2>
+        <p>{{ tx('voiceInsertMykadBody') }}</p>
+        <span class="go">{{ tx('continue') }} →</span>
+      </button>
+      <button type="button" class="door" @click="openKeyIn">
+        <div class="door-art" style="background: linear-gradient(145deg, #5a4718, #d7b85d)"></div>
+        <h2>{{ tx('voiceKeyInIc') }}</h2>
+        <p>{{ tx('voiceKeyInIcBody') }}</p>
+        <span class="go">{{ tx('continue') }} →</span>
+      </button>
+    </div>
+
+    <div v-else-if="identifyMode === 'insert'" class="slot-card voice-id-panel">
+      <p><span class="pulse"></span>{{ tx('kadHint') }}</p>
+      <div class="reader" aria-hidden="true">
+        <div class="reader-card"></div>
+        <div class="reader-slot"></div>
+      </div>
+      <div class="actions">
+        <button type="button" class="ghost" @click="backToChoose">{{ tx('confirmNo') }}</button>
+        <button type="button" class="solid" @click="simulateKad">{{ tx('kadSimulate') }}</button>
       </div>
     </div>
-    <h1>{{ tx('loadingAgent') }}</h1>
-    <p class="lead">{{ tx('loadingAgentLead') }}</p>
-    <p class="voice-status">{{ tx('loadingAgentStatus') }}</p>
+
+    <div v-else class="voice-id-panel">
+      <div class="slot-card">
+        <p class="ic">{{ tx('voiceKeyInIc') }}</p>
+        <input
+          class="field-display"
+          :value="icInput"
+          readonly
+          :placeholder="tx('voiceIcPlaceholder')"
+          aria-label="MyKad number"
+        />
+        <p v-if="icError" class="scan-unknown">{{ tx('voiceIcError') }}</p>
+        <div class="actions">
+          <button type="button" class="ghost" @click="backToChoose">{{ tx('confirmNo') }}</button>
+          <button type="button" class="solid" :disabled="!icInput.trim()" @click="verifyIc">
+            {{ tx('voiceIcVerify') }}
+          </button>
+        </div>
+      </div>
+      <OnScreenKeyboard @type="typeIc" @backspace="backspaceIc" @clear="clearIc" />
+    </div>
   </section>
 
-  <section v-else class="voice-desk" :class="{ 'talk-only': !splitView }">
-    <aside class="voice-talk">
+  <section v-else-if="voicePhase === 'loading'" class="panel" aria-live="polite" aria-busy="true">
+    <h1>{{ tx('kadValid') }}</h1>
+    <p class="lead">{{ tx('kadQuery') }}</p>
+    <div class="slot-card voice-id-panel">
+      <div class="query-stage">
+        <div class="query-orb" aria-hidden="true">
+          <span class="query-ring"></span>
+          <span class="query-core"></span>
+        </div>
+        <p class="query-step">{{ querySteps[queryStep] }}</p>
+        <div class="query-bar" aria-hidden="true"><span></span></div>
+        <p class="ic">{{ tx('kadQueryHint') }}</p>
+      </div>
+    </div>
+  </section>
+
+  <section v-else class="voice-desk">
+    <aside v-if="agentBooting" class="voice-talk agent-boot-inline">
+      <div class="orb-wrap connecting" aria-hidden="true">
+        <div class="orb-ring"></div>
+        <div class="orb-ring delay"></div>
+        <div class="orb">
+          <span class="orb-core"></span>
+        </div>
+      </div>
+      <h2>{{ tx('loadingAgent') }}</h2>
+      <p class="lead">{{ tx('loadingAgentLead') }}</p>
+    </aside>
+
+    <aside v-else class="voice-talk">
       <p class="live-tag">{{ tx('live') }}</p>
       <p class="voice-status">{{ status }}</p>
 
@@ -376,45 +429,9 @@ onUnmounted(() => {
           <span>{{ interim }}</span>
         </li>
         <li v-if="!error && !captions.length && !interim.trim()" class="talk-line hint">
-          {{ tx('voiceHint') }}
+          {{ tx('voiceSessionHint') }}
         </li>
       </ol>
-
-      <div v-if="pendingRecords && deskPhase === 'talk'" class="confirm-pay voice-confirm">
-        <p class="ic">{{ tx('confirmRecordsTitle') }}</p>
-        <p class="lead">{{ recordsConfirmCopy }}</p>
-        <div class="actions">
-          <button type="button" class="ghost" @click="cancelPending">{{ tx('confirmNo') }}</button>
-          <button type="button" class="solid" @click="confirmRecords">{{ tx('confirmYes') }}</button>
-        </div>
-      </div>
-
-      <div v-if="deskPhase === 'mykad'" class="voice-mykad slot-card">
-        <h2>{{ tx('voiceMykadTitle') }}</h2>
-        <p class="lead">{{ tx('voiceMykadLead') }}</p>
-        <p><span class="pulse"></span>{{ tx('kadHint') }}</p>
-        <div class="reader" aria-hidden="true">
-          <div class="reader-card"></div>
-          <div class="reader-slot"></div>
-        </div>
-        <div class="actions">
-          <button type="button" class="solid" @click="startMykadQuery">
-            {{ tx('kadSimulate') }}
-          </button>
-        </div>
-      </div>
-
-      <div v-else-if="deskPhase === 'query'" class="voice-mykad slot-card">
-        <div class="query-stage" aria-live="polite" aria-busy="true">
-          <div class="query-orb" aria-hidden="true">
-            <span class="query-ring"></span>
-            <span class="query-core"></span>
-          </div>
-          <p class="query-step">{{ querySteps[queryStep] }}</p>
-          <div class="query-bar" aria-hidden="true"><span></span></div>
-          <p class="ic">{{ tx('kadQueryHint') }}</p>
-        </div>
-      </div>
 
       <div class="voice-actions">
         <button type="button" class="ghost" @click="toggleMute">
@@ -423,10 +440,11 @@ onUnmounted(() => {
       </div>
     </aside>
 
-    <div v-if="splitView" class="voice-bills">
+    <div class="voice-bills">
       <template v-if="!paying">
         <p class="ic">{{ tx('billsHello') }} {{ session.citizen?.shortName }}</p>
-        <h1>{{ listTitle }}</h1>
+        <h1>{{ tx('voiceBillsTitle') }}</h1>
+        <p class="lead">{{ tx('billsLead') }}</p>
 
         <div class="groups">
           <p v-if="assessments.length" class="ic">{{ tx('assessment') }}</p>

@@ -616,19 +616,41 @@ a.door {
   margin: 4px 0 18px;
 }
 
-.voice-desk.talk-only {
-  grid-template-columns: 1fr;
-  justify-items: center;
+.voice-id-doors {
+  margin-top: 24px;
 }
 
-.voice-desk.talk-only .voice-talk {
-  width: min(520px, 100%);
+.voice-id-panel {
+  margin-top: 24px;
 }
 
-.voice-desk.talk-only .orb-wrap {
-  width: 220px;
-  height: 220px;
-  margin: 20px 0;
+.agent-boot-inline {
+  text-align: center;
+}
+
+.agent-boot-inline h2 {
+  font-family: var(--display);
+  font-size: clamp(28px, 3vw, 40px);
+  margin: 12px 0 8px;
+}
+
+.agent-boot-inline .orb-wrap {
+  width: 180px;
+  height: 180px;
+  margin: 0 auto;
+}
+
+.field-display {
+  width: 100%;
+  min-height: 72px;
+  margin: 12px 0;
+  padding: 0 18px;
+  font-size: clamp(28px, 3vw, 36px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  background: var(--card);
 }
 
 .voice-confirm {

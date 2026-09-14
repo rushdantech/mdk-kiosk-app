@@ -65,16 +65,11 @@ function parsePayChoice(value: unknown): PayChoice {
 
 function applyTool(
   name: string,
-  scope: BillScope,
+  _scope: BillScope,
   hooks: VoiceHooks,
   method: PayChoice = 'choose',
 ): void {
-  if (name === 'offer_records' || name === 'show_bills') {
-    hooks.onOfferRecords(scope)
-    return
-  }
-  if (name === 'confirm_records') {
-    hooks.onConfirmRecords()
+  if (name === 'offer_records' || name === 'show_bills' || name === 'confirm_records') {
     return
   }
   if (name === 'offer_payment' || name === 'start_payment' || name === 'choose_payment') {
