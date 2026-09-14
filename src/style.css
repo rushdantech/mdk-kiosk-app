@@ -616,19 +616,42 @@ a.door {
   margin: 4px 0 18px;
 }
 
-.voice-desk.talk-only {
-  grid-template-columns: 1fr;
-  justify-items: center;
+.voice-pick h1 {
+  font-family: var(--display);
+  font-size: clamp(32px, 3.4vw, 44px);
+  line-height: 1.05;
+  margin: 0 0 10px;
 }
 
-.voice-desk.talk-only .voice-talk {
-  width: min(420px, 100%);
+.voice-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
 }
 
-.voice-desk.talk-only .orb-wrap {
-  width: 220px;
-  height: 220px;
-  margin: 20px 0;
+.door.mini {
+  min-height: 180px;
+  padding: 22px;
+  text-align: left;
+  align-items: flex-start;
+}
+
+.door.mini.wide {
+  grid-column: 1 / -1;
+}
+
+.door.mini strong {
+  display: block;
+  font-family: var(--display);
+  font-size: clamp(24px, 2.4vw, 32px);
+  margin-bottom: 6px;
+}
+
+.door.mini p {
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.35;
 }
 
 .live-tag {

@@ -17,7 +17,7 @@ export function inferBillScope(text: string): BillScope | null {
   const summons =
     /saman|kompaun|summons|summon|compound|\bplat\b|\bplate\b|parking|notis trafik/.test(spoken)
   const everything =
-    /semua|ada bil|bil apa|bil saya|tengok bil|lihat bil|semak bil|check bill|check my bill|yang tertunggak|what i owe|what do i owe|all bills|senarai|rekod|outstanding/.test(
+    /semua|ada bil|bil apa|bil saya|tengok bil|lihat bil|semak bil|check bill|check my bill|yang tertunggak|what i owe|what do i owe|all bills|senarai|rekod|outstanding|tunjuk|papar|show bill|show list|list bill/.test(
       spoken,
     )
 

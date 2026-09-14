@@ -144,6 +144,24 @@ const copy = {
     en: 'The assistant could not connect. Try again, or key in the bill.',
   },
   showList: { ms: 'Tunjuk senarai bil', en: 'Show bill list' },
+  voicePickTitle: { ms: 'Pilih rekod', en: 'Choose a record' },
+  voicePickLead: {
+    ms: 'Cakap dengan pembantu, atau ketik di bawah.',
+    en: 'Talk to the assistant, or tap below.',
+  },
+  voicePickAssessment: {
+    ms: 'Cukai harta / taksiran',
+    en: 'Property assessment tax',
+  },
+  voicePickSummons: {
+    ms: 'Saman trafik & bukan trafik',
+    en: 'Traffic & other summons',
+  },
+  voicePickAll: { ms: 'Semua bil', en: 'All bills' },
+  voicePickAllBody: {
+    ms: 'Taksiran dan semua saman',
+    en: 'Assessment and every summons',
+  },
   you: { ms: 'Anda', en: 'You' },
   assistant: { ms: 'Pembantu', en: 'Assistant' },
   summons: { ms: 'Saman', en: 'Summons' },
@@ -158,6 +176,16 @@ const copy = {
     en: 'Hold about a handspan away. Keep still.',
   },
   scanDemo: { ms: 'Simulasi: imbas notis contoh', en: 'Demo: scan sample notice' },
+  scanValid: { ms: 'Kod bar dikesan', en: 'Barcode detected' },
+  scanQuery: { ms: 'Mencari rekod di MDK…', en: 'Searching council records…' },
+  scanQueryHint: {
+    ms: 'Sila tunggu sebentar.',
+    en: 'Please wait a moment.',
+  },
+  scanQueryCode: { ms: 'Membaca kod bar', en: 'Reading the barcode' },
+  scanQueryRecord: { ms: 'Mencari rekod MDK', en: 'Looking up the MDK record' },
+  scanQueryAssessment: { ms: 'Mencari cukai taksiran', en: 'Looking up assessment tax' },
+  scanQuerySummons: { ms: 'Mencari saman / kompaun', en: 'Looking up summons' },
   scanListening: {
     ms: 'Kamera terbuka. Imbas kod bar pada kertas.',
     en: 'Camera is on. Scan the barcode on the paper.',

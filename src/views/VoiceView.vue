@@ -32,7 +32,6 @@ const muted = ref(false)
 const captions = ref<ChatLine[]>([])
 const error = ref('')
 const talkList = ref<HTMLOListElement | null>(null)
-const revealed = ref(false)
 const payStage = ref<PayStage>('bills')
 const pendingMethod = ref<PayMethod | null>(null)
 
@@ -42,17 +41,21 @@ const paying = computed(() => payStage.value === 'duitnow' || payStage.value ===
 
 function showBills(scope: BillScope = 'all'): void {
   revealCitizenBills('voice', scope)
-  revealed.value = true
 }
 
 function proposePay(method: PayChoice): void {
-  revealed.value = true
   if (method === 'choose') {
     if (!paying.value) {
+      if (!session.bills.length) {
+        showBills('all')
+      }
       payStage.value = 'bills'
       pendingMethod.value = null
     }
     return
+  }
+  if (!session.bills.length) {
+    showBills('all')
   }
   if (payStage.value === method) {
     return
@@ -104,8 +107,8 @@ const runtime = createVoiceRuntime({
       captions.value = [...captions.value, line].slice(-8)
     }
   },
-  onShowBills() {
-    revealed.value = true
+  onShowBills(scope: BillScope) {
+    showBills(scope)
   },
   onReadyToPay(method: PayChoice) {
     proposePay(method)
@@ -143,6 +146,7 @@ const status = computed(() => {
   return tx.value('listeningLive')
 })
 
+const hasBills = computed(() => session.bills.length > 0)
 const assessments = computed(() => session.bills.filter((bill) => bill.kind === 'assessment'))
 const summons = computed(() => session.bills.filter((bill) => bill.kind === 'compound'))
 
@@ -231,7 +235,7 @@ onUnmounted(() => {
     <p class="voice-status">{{ tx('loadingAgentStatus') }}</p>
   </section>
 
-  <section v-else class="voice-desk" :class="{ 'talk-only': !revealed }">
+  <section v-else class="voice-desk">
     <aside class="voice-talk">
       <p class="live-tag">{{ tx('live') }}</p>
       <p class="voice-status">{{ status }}</p>
@@ -265,17 +269,33 @@ onUnmounted(() => {
       </ol>
 
       <div class="voice-actions">
-        <button v-if="!revealed" type="button" class="ghost" @click="showBills('all')">
-          {{ tx('showList') }}
-        </button>
         <button type="button" class="ghost" @click="toggleMute">
           {{ muted ? tx('unmute') : tx('mute') }}
         </button>
       </div>
     </aside>
 
-    <div v-if="revealed" class="voice-bills">
-      <template v-if="!paying">
+    <div class="voice-bills">
+      <div v-if="!hasBills" class="voice-pick">
+        <h1>{{ tx('voicePickTitle') }}</h1>
+        <p class="lead">{{ tx('voicePickLead') }}</p>
+        <div class="voice-pick-grid">
+          <button type="button" class="door mini" @click="showBills('assessment')">
+            <strong>{{ tx('assessment') }}</strong>
+            <p>{{ tx('voicePickAssessment') }}</p>
+          </button>
+          <button type="button" class="door mini" @click="showBills('compound')">
+            <strong>{{ tx('summons') }}</strong>
+            <p>{{ tx('voicePickSummons') }}</p>
+          </button>
+          <button type="button" class="door mini wide" @click="showBills('all')">
+            <strong>{{ tx('voicePickAll') }}</strong>
+            <p>{{ tx('voicePickAllBody') }}</p>
+          </button>
+        </div>
+      </div>
+
+      <template v-else-if="!paying">
         <p class="ic">{{ tx('billsHello') }} {{ session.citizen?.shortName }}</p>
         <h1>{{ listTitle }}</h1>
 
