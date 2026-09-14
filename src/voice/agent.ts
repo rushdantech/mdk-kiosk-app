@@ -111,9 +111,10 @@ function toolCallsFrom(event: Record<string, unknown>): Array<{
   name: string
   scope: BillScope
   method: PayChoice
+  callId: string
 }> {
-  const calls: Array<{ name: string; scope: BillScope; method: PayChoice }> = []
-  const consider = (name?: string, args?: unknown) => {
+  const calls: Array<{ name: string; scope: BillScope; method: PayChoice; callId: string }> = []
+  const consider = (name?: string, args?: unknown, callId?: string) => {
     if (
       name !== 'show_bills' &&
       name !== 'start_payment' &&
@@ -124,22 +125,42 @@ function toolCallsFrom(event: Record<string, unknown>): Array<{
       return
     }
     const parsed = parseToolArgs(args)
-    calls.push({ name, scope: parsed.scope, method: parsed.method })
+    calls.push({
+      name,
+      scope: parsed.scope,
+      method: parsed.method,
+      callId: callId ?? `${name}:${JSON.stringify(args ?? '')}`,
+    })
   }
 
-  consider(event.name as string | undefined, event.arguments)
-  const item = event.item as { type?: string; name?: string; arguments?: unknown } | undefined
-  if (item) {
-    consider(item.name, item.arguments)
+  consider(
+    event.name as string | undefined,
+    event.arguments,
+    typeof event.call_id === 'string' ? event.call_id : undefined,
+  )
+  const item = event.item as
+    | { type?: string; name?: string; arguments?: unknown; call_id?: string }
+    | undefined
+  if (item?.type === 'function_call' || item?.name) {
+    consider(item.name, item.arguments, item.call_id)
   }
   const output = (
     event.response as
-      | { output?: Array<{ type?: string; name?: string; arguments?: unknown }> }
+      | {
+          output?: Array<{
+            type?: string
+            name?: string
+            arguments?: unknown
+            call_id?: string
+          }>
+        }
       | undefined
   )?.output
   if (Array.isArray(output)) {
     for (const part of output) {
-      consider(part.name, part.arguments)
+      if (part.type === 'function_call' || part.name) {
+        consider(part.name, part.arguments, part.call_id)
+      }
     }
   }
   return calls
@@ -215,6 +236,8 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
   let liveUser = ''
   let liveBot = ''
   let sawBotDelta = false
+  const pendingToolArgs = new Map<string, { name?: string; args: string }>()
+  const appliedToolKeys = new Set<string>()
   const chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
 
   function emit(line: ChatLine | null, live: string, from: CaptionFrom): void {
@@ -230,18 +253,17 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       hooks.onCancelPayment()
       return
     }
+    const scope = inferBillScope(spoken)
     const pay = inferPayChoice(spoken)
+    if (scope) {
+      applyTool('show_bills', scope, hooks)
+    }
     if (pay) {
-      applyTool('start_payment', inferBillScope(spoken) ?? 'all', hooks, pay)
+      applyTool('start_payment', scope ?? 'all', hooks, pay)
       return
     }
     if (confirm === true && hooks.canConfirmPayment()) {
       hooks.onConfirmPayment()
-      return
-    }
-    const scope = inferBillScope(spoken)
-    if (scope) {
-      applyTool('show_bills', scope, hooks)
     }
   }
 
@@ -334,14 +356,12 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
           session: {
             type: 'realtime',
             instructions: kioskInstructions(session.lang),
-            turn_detection: { type: 'server_vad' },
             tools: realtimeToolDefs(),
             tool_choice: 'auto',
+            input_audio_transcription: { model: 'gpt-4o-mini-transcribe' },
+            turn_detection: { type: 'server_vad' },
             audio: {
-              input: {
-                transcription: { model: 'gpt-4o-mini-transcribe' },
-                turn_detection: { type: 'server_vad' },
-              },
+              input: { turn_detection: { type: 'server_vad' } },
               output: { voice: 'alloy' },
             },
           },
@@ -441,28 +461,67 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       return
     }
 
+    if (type === 'response.function_call_arguments.delta') {
+      const callId = String(event.call_id ?? '')
+      if (!callId) {
+        return
+      }
+      const entry = pendingToolArgs.get(callId) ?? { args: '' }
+      if (typeof event.name === 'string') {
+        entry.name = event.name
+      }
+      if (typeof event.delta === 'string') {
+        entry.args += event.delta
+      }
+      pendingToolArgs.set(callId, entry)
+      return
+    }
+
     if (
-      !type.includes('delta') &&
-      (type.includes('function_call') ||
-        type === 'response.output_item.done' ||
-        type === 'response.done')
+      type === 'response.function_call_arguments.done' ||
+      type === 'response.output_item.done' ||
+      type === 'response.done'
     ) {
       const calls = toolCallsFrom(event)
       if (!calls.length) {
         return
       }
+      let sentToolReply = false
       for (const call of calls) {
+        if (appliedToolKeys.has(call.callId)) {
+          continue
+        }
+        appliedToolKeys.add(call.callId)
         applyTool(call.name, call.scope, hooks, call.method)
+        if (call.callId.startsWith('call_')) {
+          pendingToolArgs.delete(call.callId)
+          channel?.send(
+            JSON.stringify({
+              type: 'conversation.item.create',
+              item: {
+                type: 'function_call_output',
+                call_id: call.callId,
+                output: JSON.stringify({
+                  ok: true,
+                  note: 'Stay on the call. Ask for confirmation before showing QR or the card terminal.',
+                }),
+              },
+            }),
+          )
+          sentToolReply = true
+        }
       }
       const item = event.item as { call_id?: string } | undefined
-      const callId = (typeof event.call_id === 'string' && event.call_id) || item?.call_id
-      if (callId) {
+      const fallbackCallId =
+        (typeof event.call_id === 'string' && event.call_id) || item?.call_id || ''
+      if (!sentToolReply && fallbackCallId) {
+        pendingToolArgs.delete(fallbackCallId)
         channel?.send(
           JSON.stringify({
             type: 'conversation.item.create',
             item: {
               type: 'function_call_output',
-              call_id: callId,
+              call_id: fallbackCallId,
               output: JSON.stringify({
                 ok: true,
                 note: 'Stay on the call. Ask for confirmation before showing QR or the card terminal.',
@@ -470,8 +529,11 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
             },
           }),
         )
+        sentToolReply = true
       }
-      channel?.send(JSON.stringify({ type: 'response.create' }))
+      if (sentToolReply) {
+        channel?.send(JSON.stringify({ type: 'response.create' }))
+      }
     }
   }
 

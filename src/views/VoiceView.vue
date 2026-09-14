@@ -4,7 +4,14 @@ import { useRouter } from 'vue-router'
 import PaymentPanel from '../components/PaymentPanel.vue'
 import { money } from '../data/fixtures'
 import { billDate, billDetail, billTitle, useT } from '../i18n'
-import { finishPayment, selectedTotal, session, toggleBill } from '../store/session'
+import {
+  finishPayment,
+  revealCitizenBills,
+  selectedTotal,
+  session,
+  toggleBill,
+  type BillScope,
+} from '../store/session'
 import type { ChatLine, PayMethod } from '../types'
 import {
   createVoiceRuntime,
@@ -12,7 +19,7 @@ import {
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
-import { inferConfirm, inferPayChoice, type PayChoice } from '../voice/intent'
+import { inferBillScope, inferConfirm, inferPayChoice, type PayChoice } from '../voice/intent'
 
 type PayStage = 'bills' | 'confirm' | 'duitnow' | 'card'
 
@@ -32,6 +39,11 @@ const pendingMethod = ref<PayMethod | null>(null)
 const agentReady = ref(false)
 const booting = computed(() => !agentReady.value && !error.value)
 const paying = computed(() => payStage.value === 'duitnow' || payStage.value === 'card')
+
+function showBills(scope: BillScope = 'all'): void {
+  revealCitizenBills('voice', scope)
+  revealed.value = true
+}
 
 function proposePay(method: PayChoice): void {
   revealed.value = true
@@ -159,9 +171,19 @@ watch([captions, interim], () => {
       }
     }
   } else {
+    const scope = inferBillScope(spoken)
+    if (scope) {
+      showBills(scope)
+    }
     const payMethod = inferPayChoice(spoken)
     if (payMethod === 'duitnow' || payMethod === 'card') {
       proposePay(payMethod)
+    } else if (payMethod === 'choose') {
+      if (!scope) {
+        showBills('all')
+      }
+      payStage.value = 'bills'
+      pendingMethod.value = null
     }
   }
   void nextTick(() => {
@@ -243,6 +265,9 @@ onUnmounted(() => {
       </ol>
 
       <div class="voice-actions">
+        <button v-if="!revealed" type="button" class="ghost" @click="showBills('all')">
+          {{ tx('showList') }}
+        </button>
         <button type="button" class="ghost" @click="toggleMute">
           {{ muted ? tx('unmute') : tx('mute') }}
         </button>

@@ -13,10 +13,11 @@ function normalizeSpeech(text: string): string {
 
 export function inferBillScope(text: string): BillScope | null {
   const spoken = normalizeSpeech(text)
-  const tax = /cukai|taksiran|assessment/.test(spoken)
-  const summons = /saman|kompaun|summons|compound|\bplat\b|\bplate\b/.test(spoken)
+  const tax = /cukai|taksiran|assessment|property tax|cukai pintu/.test(spoken)
+  const summons =
+    /saman|kompaun|summons|summon|compound|\bplat\b|\bplate\b|parking|notis trafik/.test(spoken)
   const everything =
-    /semua|ada bil|bil apa|yang tertunggak|what i owe|what do i owe|all bills|senarai|rekod/.test(
+    /semua|ada bil|bil apa|bil saya|tengok bil|lihat bil|semak bil|check bill|check my bill|yang tertunggak|what i owe|what do i owe|all bills|senarai|rekod|outstanding/.test(
       spoken,
     )
 
