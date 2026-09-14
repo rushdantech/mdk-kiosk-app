@@ -565,6 +565,30 @@ a.door {
   align-items: start;
 }
 
+.voice-desk.talk-only {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  min-height: 62vh;
+  align-content: center;
+}
+
+.voice-desk.talk-only .voice-talk {
+  width: min(520px, 100%);
+}
+
+.voice-desk.talk-only .orb-wrap {
+  width: 220px;
+  height: 220px;
+  margin: 20px 0;
+}
+
+.voice-boot-title {
+  font-family: var(--display);
+  font-size: clamp(40px, 5vw, 64px);
+  line-height: 1;
+  margin: 8px 0 0;
+}
+
 .voice-talk {
   position: sticky;
   top: 12px;

@@ -222,80 +222,63 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <section v-if="booting" class="agent-boot" aria-live="polite" aria-busy="true">
-    <div class="orb-wrap connecting" aria-hidden="true">
-      <div class="orb-ring"></div>
-      <div class="orb-ring delay"></div>
-      <div class="orb">
-        <span class="orb-core"></span>
-      </div>
-    </div>
-    <h1>{{ tx('loadingAgent') }}</h1>
-    <p class="lead">{{ tx('loadingAgentLead') }}</p>
-    <p class="voice-status">{{ tx('loadingAgentStatus') }}</p>
-  </section>
-
-  <section v-else class="voice-desk">
+  <section class="voice-desk" :class="{ 'talk-only': !hasBills }">
     <aside class="voice-talk">
-      <p class="live-tag">{{ tx('live') }}</p>
-      <p class="voice-status">{{ status }}</p>
-
-      <div class="orb-wrap" :class="phase" aria-hidden="true">
-        <div class="orb-ring"></div>
-        <div class="orb-ring delay"></div>
-        <div class="orb">
-          <span class="orb-core"></span>
+      <template v-if="booting">
+        <div class="orb-wrap connecting" aria-hidden="true">
+          <div class="orb-ring"></div>
+          <div class="orb-ring delay"></div>
+          <div class="orb">
+            <span class="orb-core"></span>
+          </div>
         </div>
-      </div>
+        <h1 class="voice-boot-title">{{ tx('loadingAgent') }}</h1>
+        <p class="lead">{{ tx('loadingAgentLead') }}</p>
+        <p class="voice-status">{{ tx('loadingAgentStatus') }}</p>
+      </template>
 
-      <ol ref="talkList" class="talk-lines" aria-live="polite">
-        <li v-if="error" class="talk-line bot">{{ error }}</li>
-        <li
-          v-for="(line, index) in captions"
-          :key="`${line.from}-${index}-${lineText(line)}`"
-          class="talk-line"
-          :class="line.from"
-        >
-          <span class="who">{{ who(line.from) }}</span>
-          <span>{{ lineText(line) }}</span>
-        </li>
-        <li v-if="interim.trim()" class="talk-line live" :class="liveFrom">
-          <span class="who">{{ who(liveFrom) }}</span>
-          <span>{{ interim }}</span>
-        </li>
-        <li v-if="!error && !captions.length && !interim.trim()" class="talk-line hint">
-          {{ tx('voiceHint') }}
-        </li>
-      </ol>
+      <template v-else>
+        <p class="live-tag">{{ tx('live') }}</p>
+        <p class="voice-status">{{ status }}</p>
 
-      <div class="voice-actions">
-        <button type="button" class="ghost" @click="toggleMute">
-          {{ muted ? tx('unmute') : tx('mute') }}
-        </button>
-      </div>
+        <div class="orb-wrap" :class="phase" aria-hidden="true">
+          <div class="orb-ring"></div>
+          <div class="orb-ring delay"></div>
+          <div class="orb">
+            <span class="orb-core"></span>
+          </div>
+        </div>
+
+        <ol ref="talkList" class="talk-lines" aria-live="polite">
+          <li v-if="error" class="talk-line bot">{{ error }}</li>
+          <li
+            v-for="(line, index) in captions"
+            :key="`${line.from}-${index}-${lineText(line)}`"
+            class="talk-line"
+            :class="line.from"
+          >
+            <span class="who">{{ who(line.from) }}</span>
+            <span>{{ lineText(line) }}</span>
+          </li>
+          <li v-if="interim.trim()" class="talk-line live" :class="liveFrom">
+            <span class="who">{{ who(liveFrom) }}</span>
+            <span>{{ interim }}</span>
+          </li>
+          <li v-if="!error && !captions.length && !interim.trim()" class="talk-line hint">
+            {{ tx('voiceHint') }}
+          </li>
+        </ol>
+
+        <div class="voice-actions">
+          <button type="button" class="ghost" @click="toggleMute">
+            {{ muted ? tx('unmute') : tx('mute') }}
+          </button>
+        </div>
+      </template>
     </aside>
 
-    <div class="voice-bills">
-      <div v-if="!hasBills" class="voice-pick">
-        <h1>{{ tx('voicePickTitle') }}</h1>
-        <p class="lead">{{ tx('voicePickLead') }}</p>
-        <div class="voice-pick-grid">
-          <button type="button" class="door mini" @click="showBills('assessment')">
-            <strong>{{ tx('assessment') }}</strong>
-            <p>{{ tx('voicePickAssessment') }}</p>
-          </button>
-          <button type="button" class="door mini" @click="showBills('compound')">
-            <strong>{{ tx('summons') }}</strong>
-            <p>{{ tx('voicePickSummons') }}</p>
-          </button>
-          <button type="button" class="door mini wide" @click="showBills('all')">
-            <strong>{{ tx('voicePickAll') }}</strong>
-            <p>{{ tx('voicePickAllBody') }}</p>
-          </button>
-        </div>
-      </div>
-
-      <template v-else-if="!paying">
+    <div v-if="hasBills" class="voice-bills">
+      <template v-if="!paying">
         <p class="ic">{{ tx('billsHello') }} {{ session.citizen?.shortName }}</p>
         <h1>{{ listTitle }}</h1>
 
