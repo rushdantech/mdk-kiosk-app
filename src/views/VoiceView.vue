@@ -22,6 +22,7 @@ import {
 import { inferBillScope, inferConfirm, inferPayChoice, type PayChoice } from '../voice/intent'
 
 type PayStage = 'bills' | 'confirm' | 'duitnow' | 'card'
+type DeskPhase = 'talk' | 'mykad' | 'query' | 'ready'
 
 const router = useRouter()
 const tx = useT()
@@ -32,30 +33,78 @@ const muted = ref(false)
 const captions = ref<ChatLine[]>([])
 const error = ref('')
 const talkList = ref<HTMLOListElement | null>(null)
+const deskPhase = ref<DeskPhase>('talk')
+const pendingScope = ref<BillScope>('all')
+const queryStep = ref(0)
 const payStage = ref<PayStage>('bills')
 const pendingMethod = ref<PayMethod | null>(null)
 
 const agentReady = ref(false)
 const booting = computed(() => !agentReady.value && !error.value)
 const paying = computed(() => payStage.value === 'duitnow' || payStage.value === 'card')
+const splitView = computed(() => deskPhase.value === 'ready')
+
+let mykadAuto = 0
+let queryTick = 0
+let queryDone = 0
+
+const querySteps = computed(() => [
+  tx.value('kadQueryChip'),
+  tx.value('kadQueryIc'),
+  pendingScope.value === 'assessment'
+    ? tx.value('kadQueryTax')
+    : pendingScope.value === 'compound'
+      ? tx.value('kadQuerySummons')
+      : tx.value('voiceQueryBoth'),
+])
 
 function showBills(scope: BillScope = 'all'): void {
   revealCitizenBills('voice', scope)
 }
 
+function beginMykad(scope: BillScope = 'all'): void {
+  if (deskPhase.value === 'ready') {
+    showBills(scope)
+    return
+  }
+  pendingScope.value = scope
+  deskPhase.value = 'mykad'
+  window.clearTimeout(mykadAuto)
+}
+
+function startMykadQuery(): void {
+  if (deskPhase.value !== 'mykad') {
+    return
+  }
+  window.clearTimeout(mykadAuto)
+  deskPhase.value = 'query'
+  queryStep.value = 0
+  queryTick = window.setInterval(() => {
+    queryStep.value = (queryStep.value + 1) % querySteps.value.length
+  }, 700)
+  queryDone = window.setTimeout(() => {
+    window.clearInterval(queryTick)
+    showBills(pendingScope.value)
+    deskPhase.value = 'ready'
+  }, 4200)
+}
+
+function clearMykadTimers(): void {
+  window.clearTimeout(mykadAuto)
+  window.clearInterval(queryTick)
+  window.clearTimeout(queryDone)
+}
+
 function proposePay(method: PayChoice): void {
+  if (deskPhase.value !== 'ready') {
+    return
+  }
   if (method === 'choose') {
     if (!paying.value) {
-      if (!session.bills.length) {
-        showBills('all')
-      }
       payStage.value = 'bills'
       pendingMethod.value = null
     }
     return
-  }
-  if (!session.bills.length) {
-    showBills('all')
   }
   if (payStage.value === method) {
     return
@@ -65,7 +114,12 @@ function proposePay(method: PayChoice): void {
 }
 
 function paymentConfirmReady(): boolean {
-  return payStage.value === 'confirm' && pendingMethod.value !== null && session.selected.size > 0
+  return (
+    deskPhase.value === 'ready' &&
+    payStage.value === 'confirm' &&
+    pendingMethod.value !== null &&
+    session.selected.size > 0
+  )
 }
 
 function confirmPay(): void {
@@ -107,8 +161,11 @@ const runtime = createVoiceRuntime({
       captions.value = [...captions.value, line].slice(-8)
     }
   },
-  onShowBills(scope: BillScope) {
-    showBills(scope)
+  onRequestRecords(scope: BillScope) {
+    beginMykad(scope)
+  },
+  isRecordsReady() {
+    return deskPhase.value === 'ready'
   },
   onReadyToPay(method: PayChoice) {
     proposePay(method)
@@ -134,6 +191,12 @@ const status = computed(() => {
   if (muted.value) {
     return tx.value('muted')
   }
+  if (deskPhase.value === 'mykad') {
+    return tx.value('voiceMykadStatus')
+  }
+  if (deskPhase.value === 'query') {
+    return tx.value('kadQuery')
+  }
   if (phase.value === 'connecting') {
     return tx.value('connecting')
   }
@@ -146,7 +209,6 @@ const status = computed(() => {
   return tx.value('listeningLive')
 })
 
-const hasBills = computed(() => session.bills.length > 0)
 const assessments = computed(() => session.bills.filter((bill) => bill.kind === 'assessment'))
 const summons = computed(() => session.bills.filter((bill) => bill.kind === 'compound'))
 
@@ -162,6 +224,19 @@ function who(from: CaptionFrom): string {
 watch([captions, interim], () => {
   const lastUser = [...captions.value].reverse().find((line) => line.from === 'user')
   const spoken = `${interim.value} ${lastUser ? lineText(lastUser) : ''}`
+
+  if (deskPhase.value === 'talk') {
+    const scope = inferBillScope(spoken)
+    if (scope) {
+      beginMykad(scope)
+    }
+    return
+  }
+
+  if (deskPhase.value !== 'ready') {
+    return
+  }
+
   if (payStage.value === 'confirm') {
     const switchMethod = inferPayChoice(spoken)
     if (switchMethod === 'duitnow' || switchMethod === 'card') {
@@ -175,21 +250,15 @@ watch([captions, interim], () => {
       }
     }
   } else {
-    const scope = inferBillScope(spoken)
-    if (scope) {
-      showBills(scope)
-    }
     const payMethod = inferPayChoice(spoken)
     if (payMethod === 'duitnow' || payMethod === 'card') {
       proposePay(payMethod)
     } else if (payMethod === 'choose') {
-      if (!scope) {
-        showBills('all')
-      }
       payStage.value = 'bills'
       pendingMethod.value = null
     }
   }
+
   void nextTick(() => {
     const list = talkList.value
     if (list) {
@@ -218,6 +287,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   runtime.stop()
+  clearMykadTimers()
 })
 </script>
 
@@ -235,7 +305,7 @@ onUnmounted(() => {
     <p class="voice-status">{{ tx('loadingAgentStatus') }}</p>
   </section>
 
-  <section v-else class="voice-desk">
+  <section v-else class="voice-desk" :class="{ 'talk-only': !splitView }">
     <aside class="voice-talk">
       <p class="live-tag">{{ tx('live') }}</p>
       <p class="voice-status">{{ status }}</p>
@@ -268,6 +338,42 @@ onUnmounted(() => {
         </li>
       </ol>
 
+      <div v-if="deskPhase === 'talk'" class="voice-quick">
+        <button type="button" class="ghost" @click="beginMykad('assessment')">
+          {{ tx('assessment') }}
+        </button>
+        <button type="button" class="ghost" @click="beginMykad('compound')">
+          {{ tx('summons') }}
+        </button>
+      </div>
+
+      <div v-if="deskPhase === 'mykad'" class="voice-mykad slot-card">
+        <h2>{{ tx('voiceMykadTitle') }}</h2>
+        <p class="lead">{{ tx('voiceMykadLead') }}</p>
+        <p><span class="pulse"></span>{{ tx('kadHint') }}</p>
+        <div class="reader" aria-hidden="true">
+          <div class="reader-card"></div>
+          <div class="reader-slot"></div>
+        </div>
+        <div class="actions">
+          <button type="button" class="solid" @click="startMykadQuery">
+            {{ tx('kadSimulate') }}
+          </button>
+        </div>
+      </div>
+
+      <div v-else-if="deskPhase === 'query'" class="voice-mykad slot-card">
+        <div class="query-stage" aria-live="polite" aria-busy="true">
+          <div class="query-orb" aria-hidden="true">
+            <span class="query-ring"></span>
+            <span class="query-core"></span>
+          </div>
+          <p class="query-step">{{ querySteps[queryStep] }}</p>
+          <div class="query-bar" aria-hidden="true"><span></span></div>
+          <p class="ic">{{ tx('kadQueryHint') }}</p>
+        </div>
+      </div>
+
       <div class="voice-actions">
         <button type="button" class="ghost" @click="toggleMute">
           {{ muted ? tx('unmute') : tx('mute') }}
@@ -275,27 +381,8 @@ onUnmounted(() => {
       </div>
     </aside>
 
-    <div class="voice-bills">
-      <div v-if="!hasBills" class="voice-pick">
-        <h1>{{ tx('voicePickTitle') }}</h1>
-        <p class="lead">{{ tx('voicePickLead') }}</p>
-        <div class="voice-pick-grid">
-          <button type="button" class="door mini" @click="showBills('assessment')">
-            <strong>{{ tx('assessment') }}</strong>
-            <p>{{ tx('voicePickAssessment') }}</p>
-          </button>
-          <button type="button" class="door mini" @click="showBills('compound')">
-            <strong>{{ tx('summons') }}</strong>
-            <p>{{ tx('voicePickSummons') }}</p>
-          </button>
-          <button type="button" class="door mini wide" @click="showBills('all')">
-            <strong>{{ tx('voicePickAll') }}</strong>
-            <p>{{ tx('voicePickAllBody') }}</p>
-          </button>
-        </div>
-      </div>
-
-      <template v-else-if="!paying">
+    <div v-if="splitView" class="voice-bills">
+      <template v-if="!paying">
         <p class="ic">{{ tx('billsHello') }} {{ session.citizen?.shortName }}</p>
         <h1>{{ listTitle }}</h1>
 

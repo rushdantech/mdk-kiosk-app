@@ -144,23 +144,18 @@ const copy = {
     en: 'The assistant could not connect. Try again, or key in the bill.',
   },
   showList: { ms: 'Tunjuk senarai bil', en: 'Show bill list' },
-  voicePickTitle: { ms: 'Pilih rekod', en: 'Choose a record' },
-  voicePickLead: {
-    ms: 'Cakap dengan pembantu, atau ketik di bawah.',
-    en: 'Talk to the assistant, or tap below.',
+  voiceMykadTitle: { ms: 'Masukkan MyKad', en: 'Insert MyKad' },
+  voiceMykadLead: {
+    ms: 'Sila masukkan MyKad ke pembaca di bawah untuk cari rekod.',
+    en: 'Please insert your MyKad into the reader below to look up records.',
   },
-  voicePickAssessment: {
-    ms: 'Cukai harta / taksiran',
-    en: 'Property assessment tax',
+  voiceMykadStatus: {
+    ms: 'Menunggu MyKad…',
+    en: 'Waiting for MyKad…',
   },
-  voicePickSummons: {
-    ms: 'Saman trafik & bukan trafik',
-    en: 'Traffic & other summons',
-  },
-  voicePickAll: { ms: 'Semua bil', en: 'All bills' },
-  voicePickAllBody: {
-    ms: 'Taksiran dan semua saman',
-    en: 'Assessment and every summons',
+  voiceQueryBoth: {
+    ms: 'Mencari cukai dan saman',
+    en: 'Looking up assessment and summons',
   },
   you: { ms: 'Anda', en: 'You' },
   assistant: { ms: 'Pembantu', en: 'Assistant' },

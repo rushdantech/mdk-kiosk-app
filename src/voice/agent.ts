@@ -1,4 +1,4 @@
-import { revealCitizenBills, type BillScope } from '../store/session'
+import type { BillScope } from '../store/session'
 import { session } from '../store/session'
 import type { ChatLine } from '../types'
 import { inferBillScope, inferConfirm, inferPayChoice, type PayChoice } from './intent'
@@ -70,13 +70,13 @@ function applyTool(
   method: PayChoice = 'choose',
 ): void {
   if (name === 'show_bills') {
-    revealCitizenBills('voice', scope)
-    hooks.onShowBills(scope)
+    hooks.onRequestRecords(scope)
     return
   }
   if (name === 'start_payment' || name === 'choose_payment') {
-    if (!session.bills.length) {
-      revealCitizenBills('voice', scope)
+    if (!hooks.isRecordsReady()) {
+      hooks.onRequestRecords(scope)
+      return
     }
     hooks.onReadyToPay(method)
     return
@@ -171,11 +171,12 @@ export type CaptionFrom = 'bot' | 'user'
 type VoiceHooks = {
   onPhase: (phase: AgentPhase) => void
   onCaption: (line: ChatLine | null, interim?: string, from?: CaptionFrom) => void
+  onRequestRecords: (scope: BillScope) => void
+  isRecordsReady: () => boolean
   onReadyToPay: (method: PayChoice) => void
   canConfirmPayment: () => boolean
   onConfirmPayment: () => void
   onCancelPayment: () => void
-  onShowBills: (scope: BillScope) => void
   onError: (message: string) => void
 }
 
@@ -255,8 +256,13 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     }
     const scope = inferBillScope(spoken)
     const pay = inferPayChoice(spoken)
-    if (scope) {
+    if (pay && !hooks.isRecordsReady()) {
+      applyTool('show_bills', scope ?? 'all', hooks)
+      return
+    }
+    if (scope && !hooks.isRecordsReady()) {
       applyTool('show_bills', scope, hooks)
+      return
     }
     if (pay) {
       applyTool('start_payment', scope ?? 'all', hooks, pay)
