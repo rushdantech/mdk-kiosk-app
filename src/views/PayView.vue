@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { money } from '../data/fixtures'
 import { useT } from '../i18n'
@@ -13,26 +13,6 @@ const method = ref<PayMethod | null>(null)
 const seconds = ref(300)
 let tick = 0
 
-onMounted(() => {
-  if (!session.citizen || session.bills.length === 0) {
-    loadCitizenBills(session.channel)
-  }
-  const requested = route.query.method
-  if (requested === 'duitnow' || requested === 'card') {
-    choose(requested)
-  }
-})
-
-onUnmounted(() => {
-  window.clearInterval(tick)
-})
-
-const clock = computed(() => {
-  const min = Math.floor(seconds.value / 60)
-  const sec = `${seconds.value % 60}`.padStart(2, '0')
-  return `${min}:${sec}`
-})
-
 function choose(next: PayMethod): void {
   method.value = next
   if (next === 'duitnow') {
@@ -43,6 +23,32 @@ function choose(next: PayMethod): void {
     }, 1000)
   }
 }
+
+onMounted(() => {
+  if (!session.citizen || session.bills.length === 0) {
+    loadCitizenBills(session.channel)
+  }
+})
+
+watch(
+  () => route.query.method,
+  (requested) => {
+    if (requested === 'duitnow' || requested === 'card') {
+      choose(requested)
+    }
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  window.clearInterval(tick)
+})
+
+const clock = computed(() => {
+  const min = Math.floor(seconds.value / 60)
+  const sec = `${seconds.value % 60}`.padStart(2, '0')
+  return `${min}:${sec}`
+})
 
 function complete(next: PayMethod): void {
   window.clearInterval(tick)

@@ -11,7 +11,7 @@ import {
   type AgentPhase,
   type CaptionFrom,
 } from '../voice/agent'
-import type { PayChoice } from '../voice/intent'
+import { inferPayChoice, type PayChoice } from '../voice/intent'
 
 const router = useRouter()
 const tx = useT()
@@ -24,6 +24,20 @@ const captions = ref<ChatLine[]>([])
 const error = ref('')
 const talkList = ref<HTMLOListElement | null>(null)
 const revealed = ref(false)
+const handedOff = ref(false)
+
+function handoff(method: PayChoice): void {
+  if (handedOff.value) {
+    return
+  }
+  handedOff.value = true
+  runtime.stop()
+  if (method === 'duitnow' || method === 'card') {
+    void router.push({ name: 'pay', query: { method } })
+    return
+  }
+  void router.push({ name: 'pay' })
+}
 
 const runtime = createVoiceRuntime({
   onPhase(next) {
@@ -46,12 +60,7 @@ const runtime = createVoiceRuntime({
   onReadyToPay(method: PayChoice) {
     readyToPay.value = true
     revealed.value = true
-    runtime.stop()
-    if (method === 'duitnow' || method === 'card') {
-      void router.push({ path: '/pay', query: { method } })
-      return
-    }
-    void router.push('/pay')
+    handoff(method)
   },
   onError(message) {
     error.value = message || tx.value('voiceError')
@@ -82,9 +91,8 @@ function toggleMute(): void {
   runtime.setMuted(muted.value)
 }
 
-function pay(): void {
-  runtime.stop()
-  void router.push('/pay')
+function pay(method: PayChoice = 'choose'): void {
+  handoff(method)
 }
 
 function who(from: CaptionFrom): string {
@@ -92,6 +100,12 @@ function who(from: CaptionFrom): string {
 }
 
 watch([captions, interim], () => {
+  const lastUser = [...captions.value].reverse().find((line) => line.from === 'user')
+  const spoken = `${interim.value} ${lastUser ? lineText(lastUser) : ''}`
+  const payMethod = inferPayChoice(spoken)
+  if (payMethod === 'duitnow' || payMethod === 'card') {
+    handoff(payMethod)
+  }
   void nextTick(() => {
     const list = talkList.value
     if (list) {
@@ -209,19 +223,15 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div class="checkout">
+      <div class="checkout voice-pay">
         <div>
           <p>{{ tx('total') }}</p>
           <p class="amount">RM {{ money(selectedTotal) }}</p>
         </div>
-        <button
-          type="button"
-          class="pay"
-          :disabled="session.selected.size === 0 && !readyToPay"
-          @click="pay"
-        >
-          {{ tx('payNow') }} RM {{ money(selectedTotal) }}
-        </button>
+        <div class="voice-pay-methods">
+          <button type="button" class="pay" @click="pay('duitnow')">{{ tx('duitnow') }}</button>
+          <button type="button" class="pay" @click="pay('card')">{{ tx('card') }}</button>
+        </div>
       </div>
     </div>
   </section>

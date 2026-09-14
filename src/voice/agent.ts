@@ -73,12 +73,59 @@ function applyTool(
     hooks.onShowBills(scope)
     return
   }
-  if (name === 'start_payment') {
+  if (name === 'start_payment' || name === 'choose_payment') {
     if (!session.bills.length) {
       revealCitizenBills('voice', scope)
     }
     hooks.onReadyToPay(method)
   }
+}
+
+function parseToolArgs(raw: unknown): { scope: BillScope; method: PayChoice } {
+  if (typeof raw === 'object' && raw) {
+    const parsed = raw as { kind?: unknown; method?: unknown }
+    return { scope: parseScope(parsed.kind), method: parsePayChoice(parsed.method) }
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      return parseToolArgs(JSON.parse(raw) as { kind?: unknown; method?: unknown })
+    } catch {
+      return { scope: 'all', method: 'choose' }
+    }
+  }
+  return { scope: 'all', method: 'choose' }
+}
+
+function toolCallsFrom(event: Record<string, unknown>): Array<{
+  name: string
+  scope: BillScope
+  method: PayChoice
+}> {
+  const calls: Array<{ name: string; scope: BillScope; method: PayChoice }> = []
+  const consider = (name?: string, args?: unknown) => {
+    if (name !== 'show_bills' && name !== 'start_payment' && name !== 'choose_payment') {
+      return
+    }
+    const parsed = parseToolArgs(args)
+    calls.push({ name, scope: parsed.scope, method: parsed.method })
+  }
+
+  consider(event.name as string | undefined, event.arguments)
+  const item = event.item as { type?: string; name?: string; arguments?: unknown } | undefined
+  if (item) {
+    consider(item.name, item.arguments)
+  }
+  const output = (
+    event.response as
+      | { output?: Array<{ type?: string; name?: string; arguments?: unknown }> }
+      | undefined
+  )?.output
+  if (Array.isArray(output)) {
+    for (const part of output) {
+      consider(part.name, part.arguments)
+    }
+  }
+  return calls
 }
 
 export type CaptionFrom = 'bot' | 'user'
@@ -148,6 +195,7 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
   let liveUser = ''
   let liveBot = ''
   let sawBotDelta = false
+  let handedOff = false
   const chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = []
 
   function emit(line: ChatLine | null, live: string, from: CaptionFrom): void {
@@ -155,8 +203,12 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
   }
 
   function applySpokenIntent(spoken: string): boolean {
+    if (handedOff || !spoken.trim()) {
+      return false
+    }
     const pay = inferPayChoice(spoken)
     if (pay === 'duitnow' || pay === 'card') {
+      handedOff = true
       applyTool('start_payment', inferBillScope(spoken) ?? 'all', hooks, pay)
       return true
     }
@@ -291,10 +343,18 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
         JSON.stringify({
           type: 'session.update',
           session: {
+            type: 'realtime',
             instructions: kioskInstructions(session.lang),
             turn_detection: { type: 'server_vad' },
             tools: realtimeTools(),
             tool_choice: 'auto',
+            audio: {
+              input: {
+                transcription: { model: 'gpt-4o-mini-transcribe' },
+                turn_detection: { type: 'server_vad' },
+              },
+              output: { voice: 'alloy' },
+            },
           },
         }),
       )
@@ -370,11 +430,15 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
 
     if (type.includes('input_audio_transcription')) {
       liveUser = eventText(event, liveUser)
-      if (type.includes('completed') || type.endsWith('.done')) {
-        finishUser()
+      emit(null, liveUser, 'user')
+      const pay = inferPayChoice(liveUser)
+      if (pay === 'duitnow' || pay === 'card') {
+        applySpokenIntent(liveUser)
         return
       }
-      emit(null, liveUser, 'user')
+      if (type.includes('completed') || type.endsWith('.done')) {
+        finishUser()
+      }
       return
     }
 
@@ -392,32 +456,29 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       return
     }
 
-    if (type === 'response.function_call_arguments.done' || type === 'response.output_item.done') {
-      const item = event.item as { name?: string; arguments?: string } | undefined
-      const name = String((event.name as string | undefined) ?? item?.name ?? '')
-      let scope: BillScope = 'all'
-      let method: PayChoice = 'choose'
-      const rawArgs = event.arguments ?? item?.arguments
-      if (typeof rawArgs === 'string' && rawArgs.trim()) {
-        try {
-          const parsed = JSON.parse(rawArgs) as { kind?: unknown; method?: unknown }
-          scope = parseScope(parsed.kind)
-          method = parsePayChoice(parsed.method)
-        } catch {
-          scope = 'all'
-        }
-      }
-      if (name === 'show_bills' || name === 'start_payment') {
-        applyTool(name, scope, hooks, method)
-        if (name === 'start_payment') {
+    if (
+      !type.includes('delta') &&
+      (type.includes('function_call') ||
+        type === 'response.output_item.done' ||
+        type === 'response.done')
+    ) {
+      const calls = toolCallsFrom(event)
+      for (const call of calls) {
+        if (call.name === 'start_payment' || call.name === 'choose_payment') {
+          if (!handedOff) {
+            handedOff = true
+            applyTool(call.name, call.scope, hooks, call.method)
+          }
           return
         }
+        applyTool(call.name, call.scope, hooks, call.method)
+        const item = event.item as { call_id?: string } | undefined
         channel?.send(
           JSON.stringify({
             type: 'conversation.item.create',
             item: {
               type: 'function_call_output',
-              call_id: event.call_id ?? (item as { call_id?: string } | undefined)?.call_id,
+              call_id: event.call_id ?? item?.call_id,
               output: JSON.stringify({ ok: true }),
             },
           }),
@@ -469,9 +530,19 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
     const text = data.text ?? ''
     chatHistory.push({ role: 'user', content: heard })
     chatHistory.push({ role: 'assistant', content: text })
+    const spokenPay = inferPayChoice(heard)
+    if (spokenPay === 'duitnow' || spokenPay === 'card') {
+      applyTool('start_payment', parseScope(data.kind), hooks, spokenPay)
+      return
+    }
     if (data.tool) {
-      applyTool(data.tool, parseScope(data.kind), hooks, parsePayChoice(data.method))
-      if (data.tool === 'start_payment') {
+      applyTool(
+        data.tool,
+        parseScope(data.kind),
+        hooks,
+        parsePayChoice(data.method),
+      )
+      if (data.tool === 'start_payment' || data.tool === 'choose_payment') {
         return
       }
     }
@@ -513,6 +584,11 @@ export function createVoiceRuntime(hooks: VoiceHooks): {
       }
       if (!last.isFinal) {
         emit(null, spoken, 'user')
+        const livePay = inferPayChoice(spoken)
+        if (livePay === 'duitnow' || livePay === 'card') {
+          recognition?.stop()
+          applySpokenIntent(spoken)
+        }
         return
       }
       emit(userLine(spoken), '', 'user')

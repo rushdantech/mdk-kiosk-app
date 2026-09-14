@@ -745,6 +745,16 @@ a.door {
   margin-top: 22px;
 }
 
+.voice-pay {
+  align-items: center;
+}
+
+.voice-pay-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 @keyframes breathe {
   0%,
   100% {
